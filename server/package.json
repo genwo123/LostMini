@@ -1,0 +1,15 @@
+{
+  "name": "horseracing-server",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js",
+    "build": "npm install && cd ../client && npm install && npm run build"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.1",
+    "express": "^4.21.2",
+    "node-fetch": "^3.3.2",
+    "socket.io": "^4.8.1"
+  }
+}
