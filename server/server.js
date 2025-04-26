@@ -1,382 +1,401 @@
-//  서버 통합 버전: Discord OAuth 토큰 처리 + 실시간 게임 로직 포함
-import path from "path";
-import { fileURLToPath } from "url";
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import dotenv from "dotenv";
-import cors from "cors";
-import fetch from "node-fetch";
+// gameManager.js
+// 게임 매니저: 라운드 관리, 투표, 점수 계산 등을 담당
 
-dotenv.config({ path: "../.env" });
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  path: "/socket",
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-  },
-});
-
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
-
-const PORT = process.env.PORT || 3001;
-const TRACK_LENGTH = 7;
-
-const connectedClients = new Set();
-const userSocketMap = new Map();
-
-
-app.get("/api/test", (req, res) => {
-  res.send("Hello World");
-});
-
-// Discord OAuth 처리
-app.post("/api/token", async (req, res) => {
-  // Exchange the code for an access_token
-  const response = await fetch(`https://discord.com/api/oauth2/token`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      client_id: process.env.VITE_DISCORD_CLIENT_ID,
-      client_secret: process.env.DISCORD_CLIENT_SECRET,
-      grant_type: "authorization_code",
-      code: req.body.code,
-    }),
-  });
-
-  // Retrieve the access_token from the response
-  const { access_token } = await response.json();
-
-  // Return the access_token to our client as { access_token: "..."}
-  res.send({access_token});
-  console.log(`this is access_token:${access_token}`);
-});
-
-// SPA의 라우팅 대응 - 존재하지 않는 경로 요청 시 index.html 반환
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// === 게임 상태 ===
-let deck = [];
-let timer = null;       // 게임 진행 타이머 
-let resetTimer = null; // 게임 종료 10초 후 초기화
-let waitReconnectTimer = null;  // 유저 재접속 대기 타이머 
-let horsePositions = {};
-let finishOrder = [];
-let selectedSuits = {};
-let userScores = {};
-let plusScores = {};
-
-initializeDeck();
-initializeGameState();
-
-function initializeDeck() {
-  console.log("initializeDeck");
-  const suits = ["spades", "hearts", "diamonds", "clubs"];
-  const values = ["2","3","4","5","6","7","8","9","10","J","Q","K"];
-  deck = [];
-  for (const suit of suits) {
-    for (const value of values) {
-      deck.push({ suit, value });
-    }
+class GameManager {
+  constructor(io) {
+    this.io = io;                       // Socket.IO 객체
+    this.currentRound = 0;              // 현재 라운드
+    this.maxRounds = 5;                 // 총 라운드 수
+    this.participants = {};             // 참여자 목록 {userId: {userName, score}}
+    this.votes = {                      // 투표 현황
+      'ajaePattern': 0,
+      'gyeokdol': 0,
+      'starforce': 0
+    };
+    this.currentGameMode = null;        // 현재 게임 모드
+    this.roundInProgress = false;       // 현재 라운드 진행중 여부
+    this.votingInProgress = false;      // 투표 중인지 여부
+    this.votingTimeout = null;          // 투표 타이머
+    this.roundResults = {};             // 라운드별 결과 저장
+    this.gameEnded = false;             // 게임 종료 여부
   }
-  shuffle(deck);
-}
 
-// 카드 이름 생성
-function getCardName(card) {
-  const valueNames = {
-    '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7',
-    '8': '8', '9': '9', '10': '10', 'J': '잭', 'Q': '퀸', 'K': '킹', 'A': '에이스'
-  };
-  
-  const suitNames = {
-    spades: '스페이드',
-    hearts: '하트',
-    diamonds: '다이아몬드',
-    clubs: '클럽'
-  };
-  
-  return `${suitNames[card.suit]} ${valueNames[card.value]}`;
-}
-
-// 문양 이름 가져오기
-function getSuitName(suit) {
-  const suitNames = {
-    spades: '스페이드',
-    hearts: '하트',
-    diamonds: '다이아몬드',
-    clubs: '클럽'
-  };
-  return suitNames[suit] || suit;
-}
-
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
+  // 참여자 추가
+  addParticipant(userId, userName) {
+    if (!this.participants[userId]) {
+      this.participants[userId] = {
+        userName,
+        score: 0,
+        votes: []
+      };
+      return true;
+    }
+    return false;
   }
-}
 
-function initializeUsers() {
-  // userScores = {};
-  selectedSuits = {};
-}
-
-function initializeGameState() {
-  horsePositions = {
-    spades: 0, hearts: 0, diamonds: 0, clubs: 0,
-  };
-  finishOrder = [];
-  plusScores = {};
-
-  console.log("initializeGameState");
-}
-
-let isPlaying = false;
-
-function startResetTimer() {
-  if (resetTimer) clearInterval(resetTimer);
-  resetTimer = setInterval(() => {
-    initializeDeck();
-    initializeGameState();
-    initializeUsers();
-    io.emit("game_reset");
-    clearInterval(resetTimer);
-    isPlaying = false;
-    if (timer) clearInterval(timer);
-    console.log("game_reset by startResetTimer");
-  }, 10000);
-}
-
-function startWaitReconnectTimer() {
-  if (waitReconnectTimer) clearInterval(waitReconnectTimer);
-  waitReconnectTimer = setInterval(() => {
-    initializeDeck();
-    initializeGameState();
-    initializeUsers();
-    io.emit("game_reset");
-    console.log("🎮 All players disconnected. Game reset!");
-    clearInterval(waitReconnectTimer);
-    if (timer) clearInterval(timer);
-    if (resetTimer) clearInterval(resetTimer);
-    console.log("game_reset by startWaitReconnectTimer");
-  }, 10000);
-}
-
-function startGameTimer() {
-  if (timer) clearInterval(timer);
-  timer = setInterval(() => {
-    if (deck.length === 0 || finishOrder.length > 0) {
-      clearInterval(timer);
-      calculateScores();
-      io.emit("game_end");
-      io.emit("message", { msg: "10초 후 게임이 초기화 됩니다." });
-      startResetTimer();
-      return;
+  // 투표 등록
+  registerVote(userId, gameMode) {
+    // 유효한 게임 모드가 아니면 무시
+    if (!['ajaePattern', 'gyeokdol', 'starforce'].includes(gameMode)) {
+      return { success: false, message: '유효하지 않은 게임 모드입니다.' };
     }
 
-    const card = deck.pop();
-    horsePositions[card.suit] += 1;
-
-    if (
-      horsePositions[card.suit] >= TRACK_LENGTH &&
-      !finishOrder.includes(card.suit)
-    ) {
-      finishOrder.push(card.suit);
+    // 투표 중이 아니면 무시
+    if (!this.votingInProgress) {
+      return { success: false, message: '현재 투표 중이 아닙니다.' };
     }
 
-    io.emit("card_drawn", {
-      card,
-      remaining: deck.length,
-      horsePositions
+    // 참여자가 아니면 무시
+    if (!this.participants[userId]) {
+      return { success: false, message: '게임 참여자가 아닙니다.' };
+    }
+
+    // 이미 투표했으면 이전 투표 취소하고 새로 투표
+    const prevVote = this.participants[userId].votes[this.currentRound];
+    if (prevVote) {
+      this.votes[prevVote]--;
+    }
+
+    // 새 투표 등록
+    this.votes[gameMode]++;
+    this.participants[userId].votes[this.currentRound] = gameMode;
+
+    return { 
+      success: true, 
+      message: `${gameMode}에 투표했습니다.`,
+      votes: this.votes
+    };
+  }
+
+  // 투표 시작
+  startVoting(durationSeconds = 30) {
+    if (this.roundInProgress || this.votingInProgress) {
+      return { success: false, message: '이미 진행 중인 투표나 라운드가 있습니다.' };
+    }
+
+    if (this.currentRound >= this.maxRounds) {
+      this.gameEnded = true;
+      return { success: false, message: '모든 라운드가 종료되었습니다.' };
+    }
+
+    // 투표 상태 초기화
+    this.votingInProgress = true;
+    this.votes = {
+      'ajaePattern': 0,
+      'gyeokdol': 0,
+      'starforce': 0
+    };
+
+    // 타이머 설정
+    this.votingTimeout = setTimeout(() => {
+      this.endVoting();
+    }, durationSeconds * 1000);
+
+    // 투표 시작 알림
+    this.io.emit('voting_started', {
+      round: this.currentRound + 1,
+      duration: durationSeconds
     });
 
-    const msg = `[${getCardName(card)}] 카드가 나와서 [${getSuitName(card.suit)}] 문양이 전진했습니다!`;
-    io.emit("message", { msg });
-    // console.log(msg);
-  }, 3000);
-}
-
-function calculateScores() {
-  const suitsWithPosition = Object.entries(horsePositions);
-  suitsWithPosition.sort(([, a], [, b]) => b - a);
-
-  const suitToRank = {};
-  let currentRank = 0;
-  let prevPos = null;
-
-  suitsWithPosition.forEach(([suit, pos], i) => {
-    if (pos !== prevPos) {
-      currentRank = i; // 새로운 거리일 때만 순위 업데이트
-    }
-    suitToRank[suit] = currentRank;
-    prevPos = pos;
-  });
-
-  for (const [userId, suit] of Object.entries(selectedSuits)) {
-    const rank = suitToRank[suit];
-    let score = 0;
-    if (rank === 0) score = 5;
-    else if (rank === 1) score = 3;
-    else if (rank === 2) score = 1;
-
-    if (!userScores[userId]) userScores[userId] = 0;
-    console.log("calculateScores", userId, ":", userScores[userId], "+", score);
-    userScores[userId] += score;
-    plusScores[userId] = score;
+    return { success: true, message: `${durationSeconds}초 동안 투표를 진행합니다.` };
   }
 
-  const orderedSuits = suitsWithPosition.map(([suit]) => suit);
+  // 투표 종료
+  endVoting() {
+    if (!this.votingInProgress) {
+      return { success: false, message: '진행 중인 투표가 없습니다.' };
+    }
 
-  io.emit("game_result", { scores: userScores, plusScores});
-  console.log("scores", userScores);
-  console.log("plusScores", plusScores);
-}
+    this.votingInProgress = false;
+    clearTimeout(this.votingTimeout);
 
+    // 최다 득표 게임 모드 선택
+    let maxVotes = 0;
+    let topModes = [];
 
-// === 웹소켓 통신 ===
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id, new Date().toLocaleTimeString());
-  // connectedClients.add(socket.id);
-  if (waitReconnectTimer) clearInterval(waitReconnectTimer); // 새로운 연결 확인 시 재접속 대기 타이머 해제
+    for (const mode in this.votes) {
+      if (this.votes[mode] > maxVotes) {
+        maxVotes = this.votes[mode];
+        topModes = [mode];
+      } else if (this.votes[mode] === maxVotes) {
+        topModes.push(mode);
+      }
+    }
 
-  socket.emit("request_identity"); // 유저 식별 요청
-
-  socket.on("identity_response", ({ userId, userName, avatars }) => {
-    socket.userId = userId;
-    socket.userName = userName;
-    socket.avatar = avatars;
+    // 동점일 경우 랜덤 선택
+    this.currentGameMode = topModes[Math.floor(Math.random() * topModes.length)];
     
-    if (!userSocketMap.has(userId)) {
-      userSocketMap[userId] = new Set();
-    }
-
-    if (!selectedSuits[userId]) {
-      if (isPlaying) {
-        socket.emit("message", { msg: "게임이 진행중입니다. 잠시 기다려주세요." });
-      } else {
-        socket.emit("suit_selection_request");
-        console.log("suit_selection_request", userId, selectedSuits);
-      }
-    } else {
-      socket.emit("message", { msg: "재입장을 환영합니다!" });
-      socket.emit("update_suit", { userId, selectedSuit: selectedSuits[userId] });
-      console.log("update_suit", userId, userName, selectedSuits[userId]);
-    }
-
-    userSocketMap[userId].add(socket);
-    connectedClients.add(userId);
-
-    // io.emit("user_connected", { userId, userName, score: socket.score });
-    shareUserInformations();
-    console.log("🔑 Identified user:", userId, userName, "with", userSocketMap[userId].size, "sockets");
-  });
-
-  function shareUserInformations() {
-    let liveUsers = [];
-    let userNames = {};
-    let userAvatars = {};
-
-    for (const userId in userSocketMap) {
-      const socketSet = userSocketMap[userId];
-      const socket = socketSet.values().next().value;
-
-      liveUsers.push(userId);
-      if (socket.userName) {
-        userNames[userId] = socket.userName;
-      }
-      if (socket.avatar) {
-        userAvatars[userId] = socket.avatar;
-      }
-      // console.log(userId, userNames[userId], userAvatars[userId]);
-      // console.log("userSocketMap[", userId, "]", userSocketMap[userId]);
-    }
-    
-    io.emit("user_informations", {
-      liveUsers: liveUsers,
-      userNames: userNames,
-      userAvatars: userAvatars,
-      userScores: userScores,
-      selectedSuits: selectedSuits,
+    // 투표 결과 알림
+    this.io.emit('voting_ended', {
+      round: this.currentRound + 1,
+      selectedMode: this.currentGameMode,
+      votes: this.votes
     });
-    // console.log("user_informations", {liveUsers, userNames, userAvatars, userScores, selectedSuits});
+
+    // 게임 시작
+    this.startRound();
+
+    return { 
+      success: true, 
+      message: `투표가 종료되었습니다. ${this.currentGameMode} 모드로 게임을 시작합니다.`,
+      selectedMode: this.currentGameMode
+    };
   }
 
-  function checkAllPlayersSelectedSuits() {
-    // 문양 선택 완료한 유저 수 체크
-    const readyCount = Object.keys(selectedSuits).length;
-    const clientCount = connectedClients.size;
+  // 라운드 시작
+  startRound() {
+    this.roundInProgress = true;
+    this.currentRound++;
 
-    if (readyCount === clientCount && clientCount > 0) {
-      console.log("🎮 All players selected suits. Game starting!", readyCount, "of", clientCount);
-      io.emit("message", { msg: "게임이 시작되었습니다." });
-      io.emit("game_started");
-      isPlaying = true;
-      startGameTimer();
+    // 선택된 게임 모드 시작 알림
+    this.io.emit('round_started', {
+      round: this.currentRound,
+      mode: this.currentGameMode
+    });
 
-    } else {
-      console.log("🎮 Not all players selected suits. Game not starting.", readyCount, "of", clientCount);
-      if (readyCount > clientCount) {
-        io.emit("message", { msg: "유저 수에 문제가 있었습니다. 다시 문양을 선택해주세요." });
-        initializeGameState();
-        io.emit("suit_selection_request", { score: 0 });
-      }
+    // 여기서 게임 모드별 초기화 로직을 추가할 수 있음
+    switch(this.currentGameMode) {
+      case 'ajaePattern':
+        this.initAjaePattern();
+        break;
+      case 'gyeokdol':
+        this.initGyeokdol();
+        break;
+      case 'starforce':
+        this.initStarforce();
+        break;
     }
+
+    return { 
+      success: true, 
+      message: `${this.currentRound}라운드가 시작되었습니다. 게임 모드: ${this.currentGameMode}` 
+    };
   }
 
-  socket.on("select_suit", ({ userId, userName, selectedSuit }) => {
-    selectedSuits[userId] = selectedSuit;
-    console.log(userId, userName, "selectedSuit:", selectedSuits[userId]);
-    io.emit("suit_selected", { userId, userName, selectedSuit });
-
-    checkAllPlayersSelectedSuits();
-  });
-
-  socket.on("disconnect", () => {
-    const userId = socket.userId;
-    const sockets = userSocketMap[userId];
-
-    console.log("User disconnected:", socket.id, new Date().toLocaleTimeString(), "userId:", userId);
+  // 아재 패턴 초기화
+  initAjaePattern() {
+    // 아재 패턴 게임에 필요한 키 시퀀스 생성
+    const keySequence = this.generateAjaeKeySequence();
     
-    if (userId && sockets) {
-      sockets.delete(socket);
+    // 클라이언트에 키 시퀀스 전송
+    this.io.emit('ajae_pattern_init', {
+      keySequence,
+      timeLimit: 10 // 초 단위
+    });
+  }
 
-      if (sockets.size === 0) {
-        userSocketMap.delete(userId);
-        connectedClients.delete(userId);
-        delete selectedSuits[userId];
-        console.log("🔑 User disconnected:", userId);
-        io.emit("user_disconnected", { userId });
-        checkAllPlayersSelectedSuits();
-      } else {
-        console.log("Remaining sockets for", userId, ":", sockets.size);
+  // 격돌 초기화
+  initGyeokdol() {
+    // 격돌 게임에 필요한 설정 생성
+    const config = {
+      keys: this.generateGyeokdolKeys(),
+      timeLimit: 15, // 초 단위
+      hitCount: 10 // 맞춰야 할 횟수
+    };
+    
+    // 클라이언트에 설정 전송
+    this.io.emit('gyeokdol_init', config);
+  }
+
+  // 스타포스 초기화
+  initStarforce() {
+    // 스타포스 게임에 필요한 설정 생성
+    const config = {
+      keys: this.generateStarforceKeys(),
+      timeLimit: 12, // 초 단위
+      barSpeed: 5, // 바 이동 속도 (1-10)
+      hitCount: 8 // 맞춰야 할 횟수
+    };
+    
+    // 클라이언트에 설정 전송
+    this.io.emit('starforce_init', config);
+  }
+
+  // 아재 패턴 키 시퀀스 생성
+  generateAjaeKeySequence() {
+    const possibleKeys = ['a', 's', 'd', 'f', 'j', 'k', 'l', ';'];
+    const length = 5 + this.currentRound; // 라운드가 올라갈수록 길이 증가
+    
+    const sequence = [];
+    for (let i = 0; i < length; i++) {
+      const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
+      sequence.push(randomKey);
+    }
+    
+    return sequence;
+  }
+
+  // 격돌 키 생성
+  generateGyeokdolKeys() {
+    const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
+    const count = 3 + this.currentRound; // 라운드가 올라갈수록 키 개수 증가
+    
+    const keys = [];
+    for (let i = 0; i < count; i++) {
+      const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
+      keys.push(randomKey);
+    }
+    
+    return keys;
+  }
+
+  // 스타포스 키 생성
+  generateStarforceKeys() {
+    const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
+    const count = 3 + this.currentRound; // 라운드가 올라갈수록 키 개수 증가
+    
+    const keys = [];
+    for (let i = 0; i < count; i++) {
+      const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
+      keys.push(randomKey);
+    }
+    
+    return keys;
+  }
+
+  // 게임 결과 제출 처리
+  submitResult(userId, score, timeMs) {
+    if (!this.roundInProgress) {
+      return { success: false, message: '현재 진행 중인 라운드가 없습니다.' };
+    }
+
+    if (!this.participants[userId]) {
+      return { success: false, message: '참여자가 아닙니다.' };
+    }
+
+    // 결과 저장
+    if (!this.roundResults[this.currentRound]) {
+      this.roundResults[this.currentRound] = [];
+    }
+
+    this.roundResults[this.currentRound].push({
+      userId,
+      userName: this.participants[userId].userName,
+      score,
+      timeMs
+    });
+
+    const participantCount = Object.keys(this.participants).length;
+    
+    // 모든 참여자가 결과를 제출했는지 확인
+    if (this.roundResults[this.currentRound].length === participantCount) {
+      this.endRound();
+    }
+
+    return { 
+      success: true, 
+      message: `결과가 제출되었습니다.`,
+      submittedCount: this.roundResults[this.currentRound].length,
+      totalCount: participantCount
+    };
+  }
+
+  // 라운드 종료 및 점수 계산
+  endRound() {
+    if (!this.roundInProgress) {
+      return { success: false, message: '진행 중인 라운드가 없습니다.' };
+    }
+
+    this.roundInProgress = false;
+    
+    // 결과 정렬 (점수 내림차순, 시간 오름차순)
+    const results = this.roundResults[this.currentRound].sort((a, b) => {
+      if (a.score !== b.score) {
+        return b.score - a.score; // 점수 높은 순
       }
-    } else {
-      console.log("userSocketMap", userSocketMap);
-      console.log("userSocketMap.has(userId)", userSocketMap.has(userId), userId);
+      return a.timeMs - b.timeMs; // 시간 빠른 순
+    });
+
+    // 점수 부여
+    for (let i = 0; i < results.length; i++) {
+      const userId = results[i].userId;
+      let pointsAwarded = 1; // 기본 1점
+      
+      if (i === 0) { // 1등
+        pointsAwarded = 3;
+      } else if (i === 1) { // 2등
+        pointsAwarded = 2;
+      }
+      
+      this.participants[userId].score += pointsAwarded;
+      results[i].pointsAwarded = pointsAwarded;
     }
 
-    if (connectedClients.size === 0) {
-      startWaitReconnectTimer(); // 10초 타이머 이후 유저가 없으면 게임 초기화
+    // 결과 알림
+    this.io.emit('round_ended', {
+      round: this.currentRound,
+      results: results.map(r => ({
+        userId: r.userId,
+        userName: r.userName,
+        score: r.score,
+        timeMs: r.timeMs,
+        pointsAwarded: r.pointsAwarded,
+        totalScore: this.participants[r.userId].score
+      }))
+    });
+
+    // 마지막 라운드인지 확인
+    if (this.currentRound >= this.maxRounds) {
+      this.endGame();
     }
-  });
 
-  socket.onAny((event, ...args) => {
-    console.log("📨 Received event:", event, args);
-  });
-});
+    return { 
+      success: true, 
+      message: `${this.currentRound}라운드가 종료되었습니다.`,
+      results
+    };
+  }
 
-server.listen(PORT, () => {
-  console.log("서버 실행 중: http://localhost:" + PORT);
-});
+  // 게임 종료
+  endGame() {
+    if (this.gameEnded) {
+      return { success: false, message: '이미 게임이 종료되었습니다.' };
+    }
+
+    this.gameEnded = true;
+    
+    // 최종 순위 계산
+    const finalRanking = Object.entries(this.participants)
+      .map(([userId, data]) => ({
+        userId,
+        userName: data.userName,
+        score: data.score
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    // 최종 결과 알림
+    this.io.emit('game_ended', {
+      ranking: finalRanking,
+      rounds: this.maxRounds,
+      roundResults: this.roundResults
+    });
+
+    return { 
+      success: true, 
+      message: '게임이 종료되었습니다.',
+      finalRanking
+    };
+  }
+
+  // 게임 리셋
+  resetGame() {
+    this.currentRound = 0;
+    this.currentGameMode = null;
+    this.roundInProgress = false;
+    this.votingInProgress = false;
+    this.roundResults = {};
+    this.gameEnded = false;
+    
+    // 참여자 점수 초기화
+    for (const userId in this.participants) {
+      this.participants[userId].score = 0;
+      this.participants[userId].votes = [];
+    }
+
+    this.io.emit('game_reset');
+
+    return { success: true, message: '게임이 리셋되었습니다.' };
+  }
+}
+
+module.exports = GameManager;
