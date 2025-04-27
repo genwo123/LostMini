@@ -1,0 +1,221 @@
+/* client/test-style.css */
+/* 테스트용 스타일 */
+
+/* 기본 스타일 */
+:root {
+    --bg-primary: #121212;
+    --bg-secondary: #1e1e1e;
+    --bg-tertiary: #2d2d2d;
+    
+    --text-primary: #ffffff;
+    --text-secondary: #b3b3b3;
+    
+    --accent-primary: #bb86fc; /* 보라색 계열 */
+    --accent-secondary: #03dac6; /* 청록색 계열 */
+    --accent-warning: #ff9800; /* 주황색 계열 */
+    --accent-error: #cf6679; /* 붉은색 계열 */
+  }
+  
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+  
+  .main-content {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .welcome-container {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    color: var(--text-primary);
+    width: min(1200px, 90%);
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .welcome-container h1 {
+    font-size: 2.5rem;
+    margin: 0;
+    color: var(--accent-primary);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    line-height: 1.2;
+  }
+  
+  .welcome-container p {
+    font-size: 1.2rem;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+  
+  #connection-status {
+    font-size: 1rem;
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    border-radius: 5px;
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+  
+  .game-rules {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1.5rem;
+    text-align: left;
+  }
+  
+  .game-rules h2 {
+    color: var(--accent-secondary);
+    margin: 0 0 1rem 0;
+    font-size: 1.5rem;
+  }
+  
+  .game-rules ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .game-rules li {
+    margin: 0.8rem 0;
+    padding-left: 1.5rem;
+    position: relative;
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+  
+  .game-rules li:before {
+    content: "🎮";
+    position: absolute;
+    left: 0;
+    font-size: 1rem;
+  }
+  
+  .test-controls {
+    margin-top: 30px;
+    padding: 15px;
+    background-color: rgba(255, 193, 7, 0.2);
+    border-radius: 8px;
+    border: 1px dashed var(--accent-warning);
+  }
+  
+  .test-controls h3 {
+    color: var(--accent-warning);
+    margin-top: 0;
+    margin-bottom: 15px;
+  }
+  
+  .test-button {
+    background-color: var(--accent-secondary);
+    color: black;
+    border: none;
+    padding: 8px 15px;
+    margin: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: bold;
+  }
+  
+  .test-button:hover {
+    background-color: #02b8a7;
+    transform: translateY(-2px);
+  }
+  
+  #test-ajae {
+    background-color: var(--accent-primary);
+  }
+  
+  #test-gyeokdol {
+    background-color: var(--accent-secondary);
+  }
+  
+  #test-starforce {
+    background-color: var(--accent-warning);
+  }
+  
+  .game-container {
+    height: 100vh;
+    width: 100%;
+    display: none;
+  }
+  
+  .back-button {
+    background-color: var(--accent-error);
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 20px;
+  }
+  
+  /* 아재패턴 스타일 */
+  .ajae-pattern-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 10px;
+    color: white;
+    text-align: center;
+  }
+  
+  .key-sequence-container {
+    display: flex;
+    justify-content: center;
+    margin: 30px 0;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .key-box {
+    width: 60px;
+    height: 60px;
+    background-color: #333;
+    border: 2px solid #555;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+  }
+  
+  .key-box.current {
+    background-color: #2a6099;
+    border-color: #3a80c9;
+    box-shadow: 0 0 10px #3a80c9;
+    transform: scale(1.1);
+  }
+  
+  .key-box.correct {
+    background-color: #2a9960;
+    border-color: #3ac980;
+  }
+  
+  .key-box.error {
+    background-color: #992a2a;
+    border-color: #c93a3a;
+    animation: shake 0.3s;
+  }
+  
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
