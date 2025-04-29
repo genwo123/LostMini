@@ -26,6 +26,8 @@ export default class ClientGameManager {
     this.userVote = null;
     this.round = 0;
     this.maxRounds = 5;
+    this.totalParticipants = 0;
+    this.votesSubmitted = 0;
 
     // 소켓 이벤트 리스너 등록
     this.setupSocketListeners();
@@ -58,6 +60,23 @@ export default class ClientGameManager {
     // 투표 업데이트
     this.socket.on('vote_update', (data) => {
       this.updateVotes(data.votes);
+      
+      // 모든 참가자가 투표했는지 확인하고 타이머 단축
+      this.votesSubmitted = Object.values(data.votes).reduce((sum, count) => sum + count, 0);
+      if (this.votesSubmitted >= this.totalParticipants && this.votingTimeLeft > 5) {
+        // 모든 참가자가 투표했으면 5초로 단축
+        this.votingTimeLeft = 5;
+        const timerElement = document.getElementById('voting-timer');
+        if (timerElement) {
+          timerElement.textContent = this.votingTimeLeft;
+        }
+        
+        // 알림 표시
+        const messageEvent = new CustomEvent('system-message', {
+          detail: { message: `모든 플레이어가 투표를 완료했습니다. 카운트다운이 단축됩니다!` }
+        });
+        document.dispatchEvent(messageEvent);
+      }
     });
     
     // 투표 종료
@@ -83,6 +102,11 @@ export default class ClientGameManager {
     // 게임 리셋
     this.socket.on('game_reset', () => {
       this.resetGame();
+    });
+    
+    // 유저 정보 업데이트를 받아 참가자 수 파악
+    this.socket.on('user_informations', (data) => {
+      this.totalParticipants = data.liveUsers.length;
     });
     
     // 게임 초기화 이벤트 리스너 추가
@@ -149,6 +173,7 @@ export default class ClientGameManager {
       'gyeokdol': 0,
       'starforce': 0
     };
+    this.votesSubmitted = 0;
     
     // 게임 컨테이너 비우기
     this.container.innerHTML = '';
@@ -177,7 +202,7 @@ export default class ClientGameManager {
         <div class="game-vote-card" data-game="starforce">
           <h3>스타포스</h3>
           <div class="game-image" style="background-color: #ff9800;"></div>
-          <p>움직이는 바가 목표 영역을 지날 때 키를 눌러 강화하세요!</p>
+          <p>움직이는 바가 목표 영역을 지날 때 키를 눌러 클리어하고 점수를 얻으세요!</p>
           <div class="vote-count" id="vote-starforce">0 표</div>
           <button class="vote-button">투표하기</button>
         </div>
@@ -575,9 +600,9 @@ export default class ClientGameManager {
     playSound('start');
   }
   
-  // 테스트용 키 시퀀스 생성
+  // 테스트용 키 시퀀스 생성 - qwerasdf 키로 제한
   generateKeySequence() {
-    const possibleKeys = ['a', 's', 'd', 'f', 'j', 'k', 'l', ';'];
+    const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
     const length = 5 + Math.floor(Math.random() * 3); // 5-7 키
     
     const sequence = [];

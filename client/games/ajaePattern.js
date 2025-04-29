@@ -14,6 +14,7 @@ export default class AjaePatternGame {
     this.endTime = 0;
     this.timerInterval = null;
     this.isGameActive = false;
+    this.errorCount = 0; // 오류 횟수 추적
     
     // 바인딩
     this.handleKeyDown = this.handleKeyDown.bind(this);
@@ -29,9 +30,31 @@ export default class AjaePatternGame {
   initGame(data) {
     this.clearGameArea();
     this.isGameActive = true;
-    this.keySequence = data.keySequence;
-    this.timeLimit = data.timeLimit;
+    
+    // 키 시퀀스가 없거나 유효하지 않으면 새로 생성
+    if (!data.keySequence || !Array.isArray(data.keySequence) || data.keySequence.length === 0) {
+      const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f']; // 8키로 제한
+      const length = 5 + Math.floor(Math.random() * 3); // 5-7개 키
+      
+      this.keySequence = [];
+      for (let i = 0; i < length; i++) {
+        const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
+        this.keySequence.push(randomKey);
+      }
+    } else {
+      // 기존 키 시퀀스에서 유효한 키만 필터링 (qwerasdf만 허용)
+      const validKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
+      this.keySequence = data.keySequence.filter(key => validKeys.includes(key));
+      
+      // 유효한 키가 없으면 기본값 설정
+      if (this.keySequence.length === 0) {
+        this.keySequence = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'].slice(0, 5);
+      }
+    }
+    
+    this.timeLimit = data.timeLimit || 10;
     this.currentKeyIndex = 0;
+    this.errorCount = 0;
     
     // UI 생성
     this.createGameUI();
@@ -64,7 +87,10 @@ export default class AjaePatternGame {
           </div>
         `).join('')}
       </div>
-      <div class="hint-text">키보드로 화면에 표시된 키를 순서대로 누르세요!</div>
+      <div class="hint-text">
+        <p>Q, W, E, R, A, S, D, F 키를 화면에 표시된 순서대로 누르세요!</p>
+        <p>빠르고 정확하게 입력할수록 높은 점수를 얻습니다.</p>
+      </div>
     `;
     
     this.gameContainer.appendChild(gameArea);
@@ -127,20 +153,24 @@ export default class AjaePatternGame {
         this.endGame(true);
       }
     } else {
-      // 잘못된 키 입력
-      playSound('user'); // 오류 사운드
-      
-      // 현재 키 박스에 오류 표시
-      const currentKeyBox = document.getElementById(`key-${this.currentKeyIndex}`);
-      if (currentKeyBox) {
-        currentKeyBox.classList.add('error');
+      // 잘못된 키 입력 - 유효한 키(qwerasdf)만 오류로 카운트
+      const validKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
+      if (validKeys.includes(pressedKey)) {
+        this.errorCount++;
+        playSound('user'); // 오류 사운드
         
-        // 잠시 후 오류 표시 제거
-        setTimeout(() => {
-          if (currentKeyBox) {
-            currentKeyBox.classList.remove('error');
-          }
-        }, 300);
+        // 현재 키 박스에 오류 표시
+        const currentKeyBox = document.getElementById(`key-${this.currentKeyIndex}`);
+        if (currentKeyBox) {
+          currentKeyBox.classList.add('error');
+          
+          // 잠시 후 오류 표시 제거
+          setTimeout(() => {
+            if (currentKeyBox) {
+              currentKeyBox.classList.remove('error');
+            }
+          }, 300);
+        }
       }
     }
   }
@@ -156,18 +186,26 @@ export default class AjaePatternGame {
     // 키보드 이벤트 리스너 제거
     document.removeEventListener('keydown', this.handleKeyDown);
     
-    // 점수 계산
+    // 점수 계산 (개선된 방식)
     const timeElapsed = (this.endTime - this.startTime) / 1000;
     const correctKeys = this.currentKeyIndex;
     const totalKeys = this.keySequence.length;
     const accuracy = (correctKeys / totalKeys) * 100;
     
-    // 최종 점수 = 정확도 + 보너스 (시간이 빠를수록 보너스)
+    // 점수 계산식 수정:
+    // 1. 기본 점수: 정확도(최대 100)
+    // 2. 시간 보너스: 빨리 완료할수록 보너스 높음
+    // 3. 오류 페널티: 오류 횟수에 따른 감점
     let score = Math.round(accuracy);
+    
     if (success) {
-      // 빠르게 완료했을 경우 보너스
+      // 빠르게 완료했을 경우 보너스 (남은 시간 * 10)
       const timeBonus = Math.max(0, Math.round((this.timeLimit - timeElapsed) * 10));
       score += timeBonus;
+      
+      // 오류 페널티 (각 오류마다 5점 감점, 최소 0점)
+      const errorPenalty = this.errorCount * 5;
+      score = Math.max(0, score - errorPenalty);
     }
     
     // 결과 UI 표시
@@ -179,7 +217,8 @@ export default class AjaePatternGame {
       success,
       score,
       timeMs: Math.round((this.endTime - this.startTime)),
-      accuracy
+      accuracy,
+      errorCount: this.errorCount
     });
     
     // 성공/실패 사운드
@@ -195,6 +234,7 @@ export default class AjaePatternGame {
       <div class="result-details">
         <p>정확도: ${accuracy.toFixed(1)}%</p>
         <p>소요 시간: ${timeElapsed.toFixed(1)}초</p>
+        <p>오류 횟수: ${this.errorCount}회</p>
         <p>최종 점수: ${score}점</p>
       </div>
     `;
@@ -281,8 +321,11 @@ const ajaePatternStyles = `
 
 .hint-text {
   margin: 20px 0;
-  font-style: italic;
   color: #aaa;
+}
+
+.hint-text p {
+  margin: 5px 0;
 }
 
 .result-container {
