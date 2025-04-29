@@ -1,11 +1,9 @@
-// client/main.js - Discord SDK 완전 제거 버전
+// client/main.js - 테스트 모드 제거 버전
 import { io } from "socket.io-client";
 import { playSound, startBGM, stopBGM, checkAndPlayBGM } from './soundManager.js';
 import GameManager from './ClientGameManager.js';
 import "./style.css";
-
-// 테스트 모드 설정 (개발용)
-const TEST_MODE = true;
+import "./layout.css"; 
 
 let socket;
 let gameManager;
@@ -24,48 +22,54 @@ const thisUserName = thisUser.global_name;
 function initialize() {
   console.log("Initializing application...");
 
-  // 기본 UI 렌더링
+  // 기본 UI 렌더링 - 3단 레이아웃으로 수정
   document.querySelector('#app').innerHTML = `
-  <div class="main-content">
-    <div class="welcome-container" id="welcome-screen">
-      <h1>🎮 로스트아크 키보드 미니게임</h1>
-      <p>아재패턴, 격돌, 스타포스 등 다양한 미니게임을 플레이하세요!</p>
-      <div id="user-info"></div>
-      <div class="game-rules">
-        <h2>게임 모드</h2>
-        <ul>
-          <li>아재패턴: 시간 내에 순서대로 키보드를 입력하세요</li>
-          <li>격돌: 원의 크기가 정확한 타이밍에 키를 누르세요</li>
-          <li>스타포스: 움직이는 바가 목표 영역을 지날 때 키를 누르세요</li>
-        </ul>
-      </div>
-      <button class="start-game-button">게임 시작</button>
-      
-      <div class="test-controls">
-        <h3>테스트 모드</h3>
-        <button id="test-ajae" class="test-button">아재패턴 테스트</button>
-        <button id="test-gyeokdol" class="test-button">격돌 테스트</button>
-        <button id="test-starforce" class="test-button">스타포스 테스트</button>
+  <div class="layout-container">
+    <!-- 왼쪽 결과 사이드바 -->
+    <div class="game-results-sidebar">
+      <h2>게임 결과</h2>
+      <div class="sidebar-results-content">
+        <!-- 게임 결과가 이곳에 동적으로 표시됨 -->
       </div>
     </div>
-    <div class="game-container" id="game-screen">
-      <!-- 게임 콘텐츠는 GameManager에 의해 동적으로 관리됨 -->
-    </div>
-    <div class="chat-container" id="chat-container">
-      <div class="chat-header">
-        <span>게임 메시지</span>
-        <div class="chat-controls">
-          <button id="clear-messages" class="control-button">Clear</button>
-          <button id="single-line" class="control-button">1</button>
-          <button id="maximize-chat" class="maximize-button">⛶</button>
+
+    <!-- 중앙 메인 콘텐츠 -->
+    <div class="main-content">
+      <div class="welcome-container" id="welcome-screen">
+        <h1>🎮 로스트아크 키보드 미니게임</h1>
+        <p>아재패턴, 격돌, 스타포스 등 다양한 미니게임을 플레이하세요!</p>
+        <div id="user-info"></div>
+        <div class="game-rules">
+          <h2>게임 모드</h2>
+          <ul>
+            <li>아재패턴: 시간 내에 순서대로 키보드를 입력하세요</li>
+            <li>격돌: 원의 크기가 정확한 타이밍에 키를 누르세요</li>
+            <li>스타포스: 움직이는 바가 목표 영역을 지날 때 키를 누르세요</li>
+          </ul>
         </div>
+        <button class="start-game-button">게임 시작</button>
       </div>
-      <div class="chat-messages"></div>
+      <div class="game-container" id="game-screen">
+        <!-- 게임 콘텐츠는 GameManager에 의해 동적으로 관리됨 -->
+      </div>
+      <div class="chat-container" id="chat-container">
+        <div class="chat-header">
+          <span>게임 메시지</span>
+          <div class="chat-controls">
+            <button id="clear-messages" class="control-button">Clear</button>
+            <button id="single-line" class="control-button">1</button>
+            <button id="maximize-chat" class="maximize-button">⛶</button>
+          </div>
+        </div>
+        <div class="chat-messages"></div>
+      </div>
     </div>
-  </div>
-  <div class="online-users">
-    <h2>접속중인 유저</h2>
-    <div id="online-users-list"></div>
+
+    <!-- 오른쪽 유저 목록 사이드바 -->
+    <div class="online-users">
+      <h2>접속중인 유저</h2>
+      <div id="online-users-list"></div>
+    </div>
   </div>`;
 
   // 유저 정보 추가
@@ -84,9 +88,14 @@ function initialize() {
   // 채팅 컨트롤 이벤트 등록
   registerGameMessageListeners();
   
-  // 테스트 모드 버튼 이벤트 등록
-  registerTestButtons();
+  // 결과 업데이트 이벤트 리스너 등록
+  document.addEventListener('round-results-updated', handleRoundResultsUpdate);
+  document.addEventListener('final-results-updated', handleFinalResultsUpdate);
+  
+  // BGM 확인 및 재생
+  checkAndPlayBGM();
 }
+
 
 function setupSocket() {
   // 서버에 직접 연결 (프록시 사용 안함)
@@ -201,44 +210,6 @@ function activateStartButton() {
   });
 }
 
-function registerTestButtons() {
-  // 테스트 버튼 이벤트 리스너
-  document.getElementById('test-ajae')?.addEventListener('click', () => {
-    const data = {
-      keySequence: ['a', 's', 'd', 'f', 'j', 'k', 'l'],
-      timeLimit: 10
-    };
-    socket.emit('ajae_pattern_init', data);
-    
-    document.getElementById('welcome-screen').style.display = 'none';
-    document.getElementById('game-screen').classList.add('active');
-  });
-
-  document.getElementById('test-gyeokdol')?.addEventListener('click', () => {
-    const data = {
-      difficulty: 'normal',
-      ringCount: 8,
-      speed: 1
-    };
-    socket.emit('gyeokdol_init', data);
-    
-    document.getElementById('welcome-screen').style.display = 'none';
-    document.getElementById('game-screen').classList.add('active');
-  });
-
-  document.getElementById('test-starforce')?.addEventListener('click', () => {
-    const data = {
-      difficulty: 'normal',
-      attempts: 10,
-      barSpeed: 1
-    };
-    socket.emit('starforce_init', data);
-    
-    document.getElementById('welcome-screen').style.display = 'none';
-    document.getElementById('game-screen').classList.add('active');
-  });
-}
-
 function registerGameMessageListeners() {
   // Clear 버튼 이벤트 리스너
   document.getElementById('clear-messages')?.addEventListener('click', () => {
@@ -293,6 +264,70 @@ function registerGameMessageListeners() {
   document.addEventListener('system-message', (event) => {
     addSystemMessage(event.detail.message);
   });
+}
+
+// 라운드 결과 업데이트 핸들러
+function handleRoundResultsUpdate(event) {
+  const { round, results } = event.detail;
+  
+  // 사이드바에 결과 표시
+  const sidebarContent = document.querySelector('.sidebar-results-content');
+  if (!sidebarContent) return;
+  
+  sidebarContent.innerHTML = `
+    <div class="sidebar-round-title">${round}라운드 결과</div>
+    <table class="sidebar-results-table">
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>이름</th>
+          <th>점수</th>
+          <th>+/-</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map((result, index) => `
+          <tr class="${result.userId === socket.id ? 'my-result' : ''}">
+            <td>${index + 1}</td>
+            <td>${result.userName}</td>
+            <td>${result.score}</td>
+            <td>+${result.pointsAwarded || 0}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// 최종 결과 업데이트 핸들러
+function handleFinalResultsUpdate(event) {
+  const { ranking } = event.detail;
+  
+  // 사이드바에 최종 결과 표시
+  const sidebarContent = document.querySelector('.sidebar-results-content');
+  if (!sidebarContent) return;
+  
+  sidebarContent.innerHTML = `
+    <div class="sidebar-round-title">최종 결과</div>
+    <table class="sidebar-results-table">
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>이름</th>
+          <th>총점</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${ranking.map((player, index) => `
+          <tr class="${player.userId === socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
+            <td>${index + 1}</td>
+            <td>${player.userName}</td>
+            <td>${player.score}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 // 사용자 관리 함수

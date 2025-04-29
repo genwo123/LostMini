@@ -320,13 +320,48 @@ export default class ClientGameManager {
     resultMessage.innerHTML = `
       <h3>투표 결과</h3>
       <p>"${this.getGameDisplayName(selectedMode)}"가 선택되었습니다!</p>
-      <p>잠시 후 게임이 시작됩니다...</p>
+      <div class="countdown-timer">
+        <p>게임 시작까지</p>
+        <div class="countdown-display">5</div>
+        <p>초</p>
+      </div>
     `;
     
     this.container.appendChild(resultMessage);
     
     // 결과 사운드 재생
     playSound('goal');
+    
+    // 5초 카운트다운 시작
+    let countdown = 5;
+    const countdownDisplay = document.querySelector('.countdown-display');
+    
+    // 시스템 메시지로 알림
+    const messageEvent = new CustomEvent('system-message', {
+      detail: { message: `${this.getGameDisplayName(selectedMode)} 게임이 5초 후에 시작됩니다!` }
+    });
+    document.dispatchEvent(messageEvent);
+    
+    const countdownInterval = setInterval(() => {
+      countdown--;
+      
+      if (countdownDisplay) {
+        countdownDisplay.textContent = countdown;
+      }
+      
+      // 카운트다운 사운드
+      if (countdown > 0) {
+        playSound('tick');
+      }
+      
+      // 카운트다운 종료
+      if (countdown <= 0) {
+        clearInterval(countdownInterval);
+        
+        // 게임 시작
+        this.startRound(this.round, this.gameMode);
+      }
+    }, 1000);
   }
   
   // 게임 이름 표시용
@@ -390,79 +425,44 @@ export default class ClientGameManager {
     checkAndPlayBGM();
   }
   
-  // 라운드 결과 표시
+  // 라운드 결과 표시 함수 수정
   showRoundResults(round, results) {
-    // 게임이 이미 결과를 표시하고 있기 때문에, 여기서는 추가 표시만
-    setTimeout(() => {
-      const resultsDiv = document.createElement('div');
-      resultsDiv.className = 'round-results';
-      resultsDiv.innerHTML = `
-        <h3>${round}라운드 결과</h3>
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th>순위</th>
-              <th>이름</th>
-              <th>점수</th>
-              <th>획득 점수</th>
-              <th>총점</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${results.map((result, index) => `
-              <tr class="${result.userId === this.socket.id ? 'my-result' : ''}">
-                <td>${index + 1}</td>
-                <td>${result.userName}</td>
-                <td>${result.score}</td>
-                <td>+${result.pointsAwarded}</td>
-                <td>${result.totalScore}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <p>다음 라운드 시작 대기 중...</p>
-      `;
-      
-      this.container.appendChild(resultsDiv);
-      
-      // 결과 사운드 재생
-      playSound('goal');
-    }, 2000);
+    // 결과를 사이드바에만 표시하도록 수정
+    this.updateSidebarResults(round, results);
+    
+    // 결과 사운드 재생
+    playSound('goal');
+    
+    // 시스템 메시지로 결과 알림
+    const messageEvent = new CustomEvent('system-message', {
+      detail: { message: `${round}라운드가 종료되었습니다. 다음 라운드는 잠시 후 시작됩니다.` }
+    });
+    document.dispatchEvent(messageEvent);
+    
+    // 이벤트 발생 - 결과 업데이트
+    const resultsEvent = new CustomEvent('round-results-updated', {
+      detail: { round, results }
+    });
+    document.dispatchEvent(resultsEvent);
   }
   
-  // 최종 결과 표시
+  // 최종 결과 표시 함수 수정
   showFinalResults(ranking, roundResults) {
-    // 컨테이너 비우기
+    // 결과를 사이드바에만 표시하도록 수정
+    this.updateSidebarFinalResults(ranking);
+    
+    // 중앙에 게임 종료 메시지와 다시 시작 버튼만 표시
     this.container.innerHTML = '';
     
-    const finalResultsDiv = document.createElement('div');
-    finalResultsDiv.className = 'final-results';
-    finalResultsDiv.innerHTML = `
+    const gameEndDiv = document.createElement('div');
+    gameEndDiv.className = 'game-end-message';
+    gameEndDiv.innerHTML = `
       <h2>게임 종료!</h2>
-      <h3>최종 순위</h3>
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th>순위</th>
-            <th>이름</th>
-            <th>총점</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${ranking.map((player, index) => `
-            <tr class="${player.userId === this.socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
-              <td>${index + 1}</td>
-              <td>${player.userName}</td>
-              <td>${player.score}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      
+      <p>왼쪽 사이드바에서 최종 결과를 확인하세요.</p>
       <button class="restart-button">다시 시작하기</button>
     `;
     
-    this.container.appendChild(finalResultsDiv);
+    this.container.appendChild(gameEndDiv);
     
     // 다시 시작 버튼 이벤트
     document.querySelector('.restart-button').addEventListener('click', () => {
@@ -471,7 +471,168 @@ export default class ClientGameManager {
     
     // 승리 사운드 재생
     playSound('goal');
+    
+    // 시스템 메시지로 종료 알림
+    const messageEvent = new CustomEvent('system-message', {
+      detail: { message: `게임이 종료되었습니다. 최종 결과를 확인하세요!` }
+    });
+    document.dispatchEvent(messageEvent);
+    
+    // 이벤트 발생 - 최종 결과 업데이트
+    const finalResultsEvent = new CustomEvent('final-results-updated', {
+      detail: { ranking, roundResults }
+    });
+    document.dispatchEvent(finalResultsEvent);
   }
+
+  // 사이드바 라운드 결과 업데이트
+  updateSidebarResults(round, results) {
+    const sidebarContent = document.querySelector('.sidebar-results-content');
+    if (!sidebarContent) return;
+    
+    // 기존 내용 초기화
+    sidebarContent.innerHTML = '';
+    
+    // 라운드 제목 추가
+    const roundTitle = document.createElement('div');
+    roundTitle.className = 'sidebar-round-title';
+    roundTitle.textContent = `${round}라운드 결과`;
+    sidebarContent.appendChild(roundTitle);
+    
+    // 결과 테이블 생성
+    const resultTable = document.createElement('table');
+    resultTable.className = 'sidebar-results-table';
+    resultTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>이름</th>
+          <th>점수</th>
+          <th>+/-</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map((result, index) => `
+          <tr class="${result.userId === this.socket.id ? 'my-result' : ''}">
+            <td>${index + 1}</td>
+            <td>${result.userName}</td>
+            <td>${result.score}</td>
+            <td>+${result.pointsAwarded || 0}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    `;
+    sidebarContent.appendChild(resultTable);
+    
+    // 다른 유저들의 점수도 업데이트
+    this.updateUsersScore(results);
+  }
+
+  // 사이드바 최종 결과 업데이트
+  updateSidebarFinalResults(ranking) {
+    const sidebarContent = document.querySelector('.sidebar-results-content');
+    if (!sidebarContent) return;
+    
+    // 기존 내용 초기화
+    sidebarContent.innerHTML = '';
+    
+    // 최종 결과 제목 추가
+    const finalTitle = document.createElement('div');
+    finalTitle.className = 'sidebar-round-title';
+    finalTitle.textContent = '최종 결과';
+    sidebarContent.appendChild(finalTitle);
+    
+    // 결과 테이블 생성
+    const resultTable = document.createElement('table');
+    resultTable.className = 'sidebar-results-table';
+    resultTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>순위</th>
+          <th>이름</th>
+          <th>총점</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${ranking.map((player, index) => `
+          <tr class="${player.userId === this.socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
+            <td>${index + 1}</td>
+            <td>${player.userName}</td>
+            <td>${player.score}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    `;
+    sidebarContent.appendChild(resultTable);
+    
+    // 다른 유저들의 최종 점수 업데이트
+    this.updateUsersFinalScore(ranking);
+  }
+  
+
+ // 새로운 함수: 유저 점수 업데이트 (오른쪽 사이드바)
+ updateUsersScore(results) {
+  // 각 유저별로 점수 업데이트
+  results.forEach(result => {
+    const userScoreElement = document.querySelector(`#user-${result.userId} .user-score`);
+    if (userScoreElement) {
+      // 현재 라운드 결과의 총점 표시
+      userScoreElement.textContent = result.totalScore || 0;
+      
+      // 내 점수인 경우 강조 표시
+      if (result.userId === this.socket.id) {
+        const userItem = document.querySelector(`#user-${result.userId}`);
+        if (userItem) {
+          userItem.classList.add('my-result');
+        }
+      }
+    }
+  });
+}
+
+// 새로운 함수: 최종 점수 업데이트 (오른쪽 사이드바)
+updateUsersFinalScore(ranking) {
+  // 순위에 따라 유저 목록 정렬 및 점수 업데이트
+  ranking.forEach((player, index) => {
+    const userScoreElement = document.querySelector(`#user-${player.userId} .user-score`);
+    if (userScoreElement) {
+      // 최종 점수 표시
+      userScoreElement.textContent = player.score;
+      
+      // 1등인 경우 강조 표시
+      const userItem = document.querySelector(`#user-${player.userId}`);
+      if (userItem) {
+        if (index === 0) {
+          userItem.classList.add('winner');
+        }
+        
+        // 내 결과인 경우 강조 표시
+        if (player.userId === this.socket.id) {
+          userItem.classList.add('my-result');
+        }
+      }
+    }
+  });
+  
+  // 유저 리스트 컨테이너
+  const usersListContainer = document.querySelector('#online-users-list');
+  if (!usersListContainer) return;
+  
+  // 점수 순으로 유저 목록 재정렬
+  const userItems = Array.from(usersListContainer.querySelectorAll('.online-user-item'));
+  
+  // 점수 기준으로 정렬 (내림차순)
+  userItems.sort((a, b) => {
+    const scoreA = parseInt(a.querySelector('.user-score').textContent) || 0;
+    const scoreB = parseInt(b.querySelector('.user-score').textContent) || 0;
+    return scoreB - scoreA;
+  });
+  
+  // 정렬된 순서로 DOM에 다시 추가
+  userItems.forEach(item => {
+    usersListContainer.appendChild(item);
+  });
+}
   
   // 게임 리셋
   resetGame() {
@@ -502,115 +663,14 @@ export default class ClientGameManager {
       <h2>게임 대기 중</h2>
       <p>방장이 게임을 시작하기를 기다리고 있습니다.</p>
       <button id="start-game-btn" class="start-game-button">게임 시작!</button>
-      
-      ${TEST_MODE ? `
-      <div class="test-controls">
-        <h3>테스트 모드</h3>
-        <button id="test-ajae" class="test-button">아재패턴 테스트</button>
-        <button id="test-gyeokdol" class="test-button">격돌 테스트</button>
-        <button id="test-starforce" class="test-button">스타포스 테스트</button>
-      </div>
-      ` : ''}
     `;
     
     this.container.appendChild(waitingDiv);
     
     // 일반 시작 버튼 이벤트
-    document.getElementById('start-game-btn').addEventListener('click', () => {
+    document.getElementById('start-game-btn')?.addEventListener('click', () => {
       this.socket.emit('start_voting');
       playSound('start');
     });
-    
-    // 테스트 모드 버튼 이벤트
-    if (TEST_MODE) {
-      document.getElementById('test-ajae').addEventListener('click', () => {
-        this.forceStartGame('ajaePattern');
-      });
-      
-      document.getElementById('test-gyeokdol').addEventListener('click', () => {
-        this.forceStartGame('gyeokdol');
-      });
-      
-      document.getElementById('test-starforce').addEventListener('click', () => {
-        this.forceStartGame('starforce');
-      });
-    }
-  }
-  
-  // 테스트용 기능: 투표 없이 강제로 게임 시작
-  forceStartGame(gameMode) {
-    if (!TEST_MODE) return;
-    
-    console.log(`Force starting game: ${gameMode}`);
-    
-    // 웰컴 화면이 표시되어 있으면 숨김
-    const welcomeScreen = document.getElementById('welcome-screen');
-    if (welcomeScreen) {
-      welcomeScreen.style.display = 'none';
-    }
-    
-    // 게임 컨테이너가 보이는지 확인
-    if (this.container) {
-      this.container.style.display = 'block';
-      console.log('Game container display set to block');
-    }
-    
-    this.gameMode = gameMode;
-    this.round = 1;
-    
-    // 게임 시작
-    this.startRound(this.round, this.gameMode);
-    
-    // 시스템 메시지 추가
-    const messageEvent = new CustomEvent('system-message', {
-      detail: { message: `테스트 모드: ${this.getGameDisplayName(gameMode)} 게임을 강제로 시작합니다.` }
-    });
-    document.dispatchEvent(messageEvent);
-    
-    // 해당 게임에 필요한 초기화 데이터 생성
-    let initData = null;
-    
-    switch(gameMode) {
-      case 'ajaePattern':
-        initData = {
-          keySequence: this.generateKeySequence(),
-          timeLimit: 10
-        };
-        this.socket.emit('ajae_pattern_init', initData);
-        break;
-        
-      case 'gyeokdol':
-        initData = {
-          difficulty: 'normal',
-          ringCount: 8
-        };
-        this.socket.emit('gyeokdol_init', initData);
-        break;
-        
-      case 'starforce':
-        initData = {
-          difficulty: 'normal',
-          attempts: 10
-        };
-        this.socket.emit('starforce_init', initData);
-        break;
-    }
-    
-    // 사운드 재생
-    playSound('start');
-  }
-  
-  // 테스트용 키 시퀀스 생성 - qwerasdf 키로 제한
-  generateKeySequence() {
-    const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
-    const length = 5 + Math.floor(Math.random() * 3); // 5-7 키
-    
-    const sequence = [];
-    for (let i = 0; i < length; i++) {
-      const randomKey = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
-      sequence.push(randomKey);
-    }
-    
-    return sequence;
   }
 }
