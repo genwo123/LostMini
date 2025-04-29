@@ -13,6 +13,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    open: true, // 브라우저 자동으로 열기
     proxy: {
       '/.proxy/socket': {
         target: 'http://localhost:3001',

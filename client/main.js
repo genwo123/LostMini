@@ -1,5 +1,4 @@
-// client/main.js
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+// client/main.js - Discord SDK 완전 제거 버전
 import { io } from "socket.io-client";
 import { playSound, startBGM, stopBGM, checkAndPlayBGM } from './soundManager.js';
 import GameManager from './ClientGameManager.js';
@@ -8,125 +7,22 @@ import "./style.css";
 // 테스트 모드 설정 (개발용)
 const TEST_MODE = true;
 
-let auth;
 let socket;
 let gameManager;
-const discordSdk = new DiscordSDK(import.meta.env.VITE_DISCORD_CLIENT_ID);
 
 // 사용자 정보
-let thisUser = null;
-let thisUserId = null;
-let thisUserName = null;
-
-function setupSocket() {
-  socket = io({
-    path: "/.proxy/socket",
-    transports: ["websocket"],
-  });
-
-  socket.on("connect", () => {
-    console.log("Connected to server:", socket.id);
-    addSystemMessage("서버와 연결되었습니다. 즐거운 게임 되세요!");
-  });
-  
-  socket.on("connect_error", (err) => {
-    console.error("❌ Socket connection error:", err.message);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Disconnected from server:", socket.id);
-    addSystemMessage("서버와 연결이 끊어졌습니다. 연결을 확인해주세요.");
-    resetGame();
-  });
-
-  socket.on("request_identity", async () => {
-    console.log("🔑 Requesting identity");
-    await getCurrentUser();
-    socket.emit("identity_response", { userId: thisUserId, userName: thisUserName, avatars: thisUser.avatar });
-  });
-
-  socket.on("message", ({ msg }) => {
-    addSystemMessage(msg);
-  });
-
-  socket.on("user_informations", ({ liveUsers, userNames, userAvatars, userScores }) => {
-    liveUsers.forEach((userId) => {
-      const tempUrl = `https://cdn.discordapp.com/avatars/${userId}/${userAvatars[userId]}.png?size=256`;
-      addOnlineUser(userId, userNames[userId], tempUrl);
-      updateUserScore(userId, userScores[userId]);
-    });
-  });
-
-  socket.on("user_disconnected", ({ userId }) => {
-    removeOnlineUser(userId);
-    playSound("user");
-  });
-}
-
-// 게임 상태 및 점수 관리
-const gameState = {
-  userScores: {}, // userId: score
+const thisUser = {
+  id: 'test-user-' + Math.floor(Math.random() * 1000),
+  username: 'TestUser',
+  global_name: '테스트 유저',
+  avatar: 'default'
 };
+const thisUserId = thisUser.id;
+const thisUserName = thisUser.global_name;
 
-// 인증 관련
-async function setupAuth() {
-  if (TEST_MODE) {
-    // 테스트용 더미 유저 생성
-    thisUser = {
-      id: 'test-user-' + Math.floor(Math.random() * 1000),
-      username: 'TestUser',
-      global_name: '테스트 유저',
-      avatar: 'default'
-    };
-    thisUserId = thisUser.id;
-    thisUserName = thisUser.global_name;
-    return true;
-  } else {
-    // 디스코드 인증
-    return await setupDiscordSdk();
-  }
-}
-
-async function setupDiscordSdk() {
-  await discordSdk.ready();
-  const { code } = await discordSdk.commands.authorize({
-    client_id: import.meta.env.VITE_DISCORD_CLIENT_ID,
-    response_type: "code",
-    scope: ["identify", "guilds", "applications.commands"],
-    prompt: "none",
-    state: "",
-  });
-
-  const response = await fetch("/.proxy/api/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  });
-
-  const { access_token } = await response.json();
-  auth = await discordSdk.commands.authenticate({ access_token });
-  return true;
-}
-
-async function getCurrentUser() {
-  if (thisUser == null) {
-    if (TEST_MODE) {
-      // 테스트 모드에서는 이미 설정됨
-      return;
-    }
-    
-    const res = await fetch("https://discord.com/api/v10/users/@me", {
-      headers: { Authorization: `Bearer ${auth.access_token}` },
-    });
-    thisUser = await res.json();
-    thisUserId = thisUser.id;
-    thisUserName = thisUser.global_name ?? `${thisUser.username}#${thisUser.discriminator}`;
-  }
-}
-
-// 초기화
-setupAuth().then(async () => {
-  console.log("Authentication completed");
+// 초기화 함수 
+function initialize() {
+  console.log("Initializing application...");
 
   // 기본 UI 렌더링
   document.querySelector('#app').innerHTML = `
@@ -143,7 +39,14 @@ setupAuth().then(async () => {
           <li>스타포스: 움직이는 바가 목표 영역을 지날 때 키를 누르세요</li>
         </ul>
       </div>
-      <button class="start-game-button" disabled>로그인 중...</button>
+      <button class="start-game-button">게임 시작</button>
+      
+      <div class="test-controls">
+        <h3>테스트 모드</h3>
+        <button id="test-ajae" class="test-button">아재패턴 테스트</button>
+        <button id="test-gyeokdol" class="test-button">격돌 테스트</button>
+        <button id="test-starforce" class="test-button">스타포스 테스트</button>
+      </div>
     </div>
     <div class="game-container" id="game-screen">
       <!-- 게임 콘텐츠는 GameManager에 의해 동적으로 관리됨 -->
@@ -166,7 +69,7 @@ setupAuth().then(async () => {
   </div>`;
 
   // 유저 정보 추가
-  await appendUser();
+  appendUser();
   
   // 소켓 설정
   setupSocket();
@@ -180,47 +83,79 @@ setupAuth().then(async () => {
   
   // 채팅 컨트롤 이벤트 등록
   registerGameMessageListeners();
-});
-
-function activateStartButton() {
-  const startButton = document.querySelector('.start-game-button');
   
-  if (startButton) {
-    startButton.textContent = '게임 시작';
-    startButton.disabled = false;
+  // 테스트 모드 버튼 이벤트 등록
+  registerTestButtons();
+}
 
-    startButton.addEventListener('click', () => {
-      document.getElementById('welcome-screen').style.display = 'none';
-      document.getElementById('game-screen').classList.add('active');
-      
-      // 게임 매니저의 대기 화면 표시
-      gameManager.showWaitingScreen();
-      addSystemMessage('게임에 입장했습니다! 다른 플레이어들을 기다리는 중...');
+function setupSocket() {
+  // 서버에 직접 연결 (프록시 사용 안함)
+  socket = io("http://localhost:3001", {
+    path: "/socket",
+    transports: ["websocket"],
+  });
+
+  console.log("📡 Trying to connect to socket...");
+
+  socket.on("connect", () => {
+    console.log("✅ Connected! socket.id:", socket.id);
+    addSystemMessage("서버와 연결되었습니다. 즐거운 게임 되세요!");
+    
+    // 연결되면 유저 정보 전송
+    socket.emit("identity_response", { 
+      userId: thisUserId, 
+      userName: thisUserName,
+      avatars: thisUser.avatar 
     });
-  }
+  });
+  
+  socket.on("connect_error", (err) => {
+    console.error("❌ Socket connection error:", err.message);
+    addSystemMessage(`서버 연결 오류: ${err.message}`);
+  });
 
-  // 페이지 나갈 때 유저 제거
-  window.addEventListener('beforeunload', () => {
-    if (socket && thisUserId) {
-      socket.emit('user_leave', { userId: thisUserId });
-    }
+  socket.on("disconnect", () => {
+    console.log("🔌 Disconnected");
+    addSystemMessage("서버와 연결이 끊어졌습니다. 연결을 확인해주세요.");
+    resetGame();
+  });
+
+  socket.on("request_identity", () => {
+    console.log("🔑 Requesting identity");
+    socket.emit("identity_response", { 
+      userId: thisUserId, 
+      userName: thisUserName, 
+      avatars: thisUser.avatar 
+    });
+  });
+
+  socket.on("message", ({ msg }) => {
+    addSystemMessage(msg);
+  });
+
+  socket.on("user_informations", ({ liveUsers, userNames, userAvatars, userScores }) => {
+    liveUsers.forEach((userId) => {
+      const tempUrl = userAvatars[userId] ? 
+        `https://cdn.discordapp.com/avatars/${userId}/${userAvatars[userId]}.png?size=256` : 
+        '/images/default-avatar.png';
+      addOnlineUser(userId, userNames[userId], tempUrl);
+      updateUserScore(userId, userScores[userId]);
+    });
+  });
+
+  socket.on("user_disconnected", ({ userId }) => {
+    removeOnlineUser(userId);
+    playSound("user");
   });
 }
 
-async function appendUser() {
+function appendUser() {
   const userInfo = document.querySelector('#user-info');
-
-  await getCurrentUser();
   
   // 아바타 URL 설정
-  let avatarUrl;
-  if (TEST_MODE) {
-    avatarUrl = '/images/default-avatar.png'; // 기본 아바타
-  } else {
-    avatarUrl = `https://cdn.discordapp.com/avatars/${thisUserId}/${thisUser.avatar}.png?size=256`;
-  }
+  const avatarUrl = '/images/default-avatar.png'; // 기본 아바타
 
-  // 온라인 목록에도 추가
+  // 온라인 목록에 추가
   addOnlineUser(thisUserId, thisUserName, avatarUrl);
 
   // #user-info에 유저 프로필 추가
@@ -244,9 +179,69 @@ async function appendUser() {
   }
 }
 
+function activateStartButton() {
+  const startButton = document.querySelector('.start-game-button');
+  
+  if (startButton) {
+    startButton.addEventListener('click', () => {
+      document.getElementById('welcome-screen').style.display = 'none';
+      document.getElementById('game-screen').classList.add('active');
+      
+      // 게임 매니저의 대기 화면 표시
+      gameManager.showWaitingScreen();
+      addSystemMessage('게임에 입장했습니다! 다른 플레이어들을 기다리는 중...');
+    });
+  }
+
+  // 페이지 나갈 때 유저 제거
+  window.addEventListener('beforeunload', () => {
+    if (socket && thisUserId) {
+      socket.emit('user_leave', { userId: thisUserId });
+    }
+  });
+}
+
+function registerTestButtons() {
+  // 테스트 버튼 이벤트 리스너
+  document.getElementById('test-ajae')?.addEventListener('click', () => {
+    const data = {
+      keySequence: ['a', 's', 'd', 'f', 'j', 'k', 'l'],
+      timeLimit: 10
+    };
+    socket.emit('ajae_pattern_init', data);
+    
+    document.getElementById('welcome-screen').style.display = 'none';
+    document.getElementById('game-screen').classList.add('active');
+  });
+
+  document.getElementById('test-gyeokdol')?.addEventListener('click', () => {
+    const data = {
+      difficulty: 'normal',
+      ringCount: 8,
+      speed: 1
+    };
+    socket.emit('gyeokdol_init', data);
+    
+    document.getElementById('welcome-screen').style.display = 'none';
+    document.getElementById('game-screen').classList.add('active');
+  });
+
+  document.getElementById('test-starforce')?.addEventListener('click', () => {
+    const data = {
+      difficulty: 'normal',
+      attempts: 10,
+      barSpeed: 1
+    };
+    socket.emit('starforce_init', data);
+    
+    document.getElementById('welcome-screen').style.display = 'none';
+    document.getElementById('game-screen').classList.add('active');
+  });
+}
+
 function registerGameMessageListeners() {
   // Clear 버튼 이벤트 리스너
-  document.getElementById('clear-messages').addEventListener('click', () => {
+  document.getElementById('clear-messages')?.addEventListener('click', () => {
     const chatMessages = document.querySelector('.chat-messages');
     if (chatMessages) {
       while (chatMessages.firstChild) {
@@ -257,37 +252,46 @@ function registerGameMessageListeners() {
   });
 
   // 한 줄 보기 버튼 이벤트 리스너
-  document.getElementById('single-line').addEventListener('click', () => {
+  document.getElementById('single-line')?.addEventListener('click', () => {
     const chatContainer = document.getElementById('chat-container');
     const singleLineButton = document.getElementById('single-line');
 
-    if (chatContainer.classList.contains('single-line')) {
-      chatContainer.classList.remove('single-line');
-      singleLineButton.classList.remove('active');
-    } else {
-      chatContainer.classList.add('single-line');
-      chatContainer.classList.remove('maximized');
-      document.getElementById('maximize-chat').textContent = '⛶';
-      singleLineButton.classList.add('active');
+    if (chatContainer && singleLineButton) {
+      if (chatContainer.classList.contains('single-line')) {
+        chatContainer.classList.remove('single-line');
+        singleLineButton.classList.remove('active');
+      } else {
+        chatContainer.classList.add('single-line');
+        chatContainer.classList.remove('maximized');
+        document.getElementById('maximize-chat').textContent = '⛶';
+        singleLineButton.classList.add('active');
+      }
     }
   });
 
   // 최대화 버튼 이벤트 리스너
-  document.getElementById('maximize-chat').addEventListener('click', () => {
+  document.getElementById('maximize-chat')?.addEventListener('click', () => {
     const chatContainer = document.getElementById('chat-container');
     const maximizeButton = document.getElementById('maximize-chat');
 
-    if (chatContainer.classList.contains('maximized')) {
-      chatContainer.classList.remove('maximized');
-      chatContainer.classList.remove('single-line');
-      document.getElementById('single-line').classList.remove('active');
-      maximizeButton.textContent = '⛶';
-    } else {
-      chatContainer.classList.add('maximized');
-      chatContainer.classList.remove('single-line');
-      document.getElementById('single-line').classList.remove('active');
-      maximizeButton.textContent = '_';
+    if (chatContainer && maximizeButton) {
+      if (chatContainer.classList.contains('maximized')) {
+        chatContainer.classList.remove('maximized');
+        chatContainer.classList.remove('single-line');
+        document.getElementById('single-line')?.classList.remove('active');
+        maximizeButton.textContent = '⛶';
+      } else {
+        chatContainer.classList.add('maximized');
+        chatContainer.classList.remove('single-line');
+        document.getElementById('single-line')?.classList.remove('active');
+        maximizeButton.textContent = '_';
+      }
     }
+  });
+  
+  // 시스템 메시지 이벤트 리스너
+  document.addEventListener('system-message', (event) => {
+    addSystemMessage(event.detail.message);
   });
 }
 
@@ -303,7 +307,7 @@ function addOnlineUser(userId, username, avatarUrl) {
     <span class="user-name">${username}</span>
     <span class="user-score">0</span>
   `;
-  document.getElementById("online-users-list").appendChild(el);
+  document.getElementById("online-users-list")?.appendChild(el);
 }
 
 function removeOnlineUser(userId) {
@@ -363,25 +367,8 @@ function resetGame() {
   }
 }
 
-// 타이머 시작 함수
-function startTimer(seconds = 3, callback) {
-  const timerElement = document.createElement('div');
-  timerElement.className = 'timer';
-  timerElement.textContent = seconds.toString();
-  document.querySelector('.game-board')?.appendChild(timerElement);
+// 애플리케이션 초기화 및 시작
+initialize();
 
-  let count = seconds;
-  const timerInterval = setInterval(() => {
-    count--;
-    timerElement.textContent = count.toString();
-    playSound("tick");
-    
-    if (count <= 0) {
-      clearInterval(timerInterval);
-      timerElement.remove();
-      if (callback) callback();
-    }
-  }, 1000);
-  
-  return timerInterval;
-}
+// BGM 확인 및 재생
+checkAndPlayBGM();

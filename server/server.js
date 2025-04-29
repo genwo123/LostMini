@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';
-// 수정: 파일명 첫 글자를 소문자로 변경 (ServerGameManager.js -> serverGameManager.js)
+// 정확한 파일명과 대소문자 일치시킴
 import ServerGameManager from './serverGameManager.js';
 
 // 환경 변수 설정
@@ -24,6 +24,7 @@ const server = createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const publicPath = join(__dirname, 'public');
+console.log('Serving static files from:', publicPath); // 디버깅용 로그 추가
 
 // Socket.IO 서버 설정 - CORS 설정 확장
 const io = new Server(server, {
@@ -37,6 +38,14 @@ const io = new Server(server, {
 
 // API 라우터 설정
 app.use(express.json());
+
+// CORS 설정 추가 (Express용)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
 
 // Discord 토큰 엔드포인트 (테스트 모드에서는 사용하지 않지만 코드는 유지)
 app.post('/api/token', async (req, res) => {
@@ -73,6 +82,11 @@ app.get('/api/test', (req, res) => {
 
 // 정적 파일 제공
 app.use(express.static(publicPath));
+
+// SPA 지원 (HTML5 History API)
+app.get('*', (req, res) => {
+  res.sendFile(join(publicPath, 'index.html'));
+});
 
 // 게임 상태 관리
 const liveUsers = []; // 접속 중인 유저 ID
@@ -245,4 +259,5 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Test mode: ${TEST_MODE ? 'enabled' : 'disabled'}`);
+  console.log(`Visit http://localhost:${PORT}/debug to see current game state`);
 });

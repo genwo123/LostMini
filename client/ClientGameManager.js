@@ -84,6 +84,58 @@ export default class ClientGameManager {
     this.socket.on('game_reset', () => {
       this.resetGame();
     });
+    
+    // 게임 초기화 이벤트 리스너 추가
+    this.socket.on('ajae_pattern_init', (data) => {
+      console.log('Received ajae_pattern_init in ClientGameManager:', data);
+      // 웰컴 화면이 표시되어 있으면 숨김
+      const welcomeScreen = document.getElementById('welcome-screen');
+      if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+      }
+      
+      // 게임 화면 표시
+      if (this.container) {
+        this.container.style.display = 'block';
+      }
+      
+      // 아재패턴 게임 화면 표시
+      this.startRound(1, 'ajaePattern');
+    });
+    
+    this.socket.on('gyeokdol_init', (data) => {
+      console.log('Received gyeokdol_init in ClientGameManager:', data);
+      // 웰컴 화면이 표시되어 있으면 숨김
+      const welcomeScreen = document.getElementById('welcome-screen');
+      if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+      }
+      
+      // 게임 화면 표시
+      if (this.container) {
+        this.container.style.display = 'block';
+      }
+      
+      // 격돌 게임 화면 표시
+      this.startRound(1, 'gyeokdol');
+    });
+    
+    this.socket.on('starforce_init', (data) => {
+      console.log('Received starforce_init in ClientGameManager:', data);
+      // 웰컴 화면이 표시되어 있으면 숨김
+      const welcomeScreen = document.getElementById('welcome-screen');
+      if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+      }
+      
+      // 게임 화면 표시
+      if (this.container) {
+        this.container.style.display = 'block';
+      }
+      
+      // 스타포스 게임 화면 표시
+      this.startRound(1, 'starforce');
+    });
   }
   
   // 투표 화면 표시
@@ -110,21 +162,21 @@ export default class ClientGameManager {
       <div class="games-grid">
         <div class="game-vote-card" data-game="ajaePattern">
           <h3>아재 패턴</h3>
-          <div class="game-image" style="background-image: url('/images/ajae-pattern.png')"></div>
+          <div class="game-image" style="background-color: #3a80c9;"></div>
           <p>주어진 시간 내에 키보드로 표시된 키를 순서대로 누르세요!</p>
           <div class="vote-count" id="vote-ajaePattern">0 표</div>
           <button class="vote-button">투표하기</button>
         </div>
         <div class="game-vote-card" data-game="gyeokdol">
           <h3>격돌</h3>
-          <div class="game-image" style="background-image: url('/images/gyeokdol.png')"></div>
+          <div class="game-image" style="background-color: #4caf50;"></div>
           <p>원이 줄어들 때 정확한 타이밍에 키를 눌러 점수를 얻으세요!</p>
           <div class="vote-count" id="vote-gyeokdol">0 표</div>
           <button class="vote-button">투표하기</button>
         </div>
         <div class="game-vote-card" data-game="starforce">
           <h3>스타포스</h3>
-          <div class="game-image" style="background-image: url('/images/starforce.png')"></div>
+          <div class="game-image" style="background-color: #ff9800;"></div>
           <p>움직이는 바가 목표 영역을 지날 때 키를 눌러 강화하세요!</p>
           <div class="vote-count" id="vote-starforce">0 표</div>
           <button class="vote-button">투표하기</button>
@@ -264,31 +316,46 @@ export default class ClientGameManager {
   
   // 라운드 시작
   startRound(round, mode) {
+    console.log(`Starting round ${round} with mode: ${mode}`);
     this.round = round;
     this.gameMode = mode;
     
+    // 게임 화면 요소 표시
+    if (this.container) {
+      this.container.style.display = 'block';
+      console.log('Game container display set to block');
+    }
+    
     // 컨테이너 비우기
     this.container.innerHTML = '';
+    console.log('Container cleared');
     
     // 게임 모드에 따라 인스턴스 생성 및 초기화
+    console.log('Creating game instance for mode:', mode);
     switch (mode) {
       case 'ajaePattern':
+        console.log('Creating AjaePatternGame');
         if (!this.games.ajaePattern) {
           this.games.ajaePattern = new AjaePatternGame(this.socket, this.container);
+          console.log('AjaePatternGame instance created:', this.games.ajaePattern);
         }
         this.currentGame = this.games.ajaePattern;
         break;
         
       case 'gyeokdol':
+        console.log('Creating GyeokdolGame');
         if (!this.games.gyeokdol) {
           this.games.gyeokdol = new GyeokdolGame(this.socket, this.container);
+          console.log('GyeokdolGame instance created:', this.games.gyeokdol);
         }
         this.currentGame = this.games.gyeokdol;
         break;
         
       case 'starforce':
+        console.log('Creating StarForceGame');
         if (!this.games.starforce) {
           this.games.starforce = new StarForceGame(this.socket, this.container);
+          console.log('StarForceGame instance created:', this.games.starforce);
         }
         this.currentGame = this.games.starforce;
         break;
@@ -448,6 +515,20 @@ export default class ClientGameManager {
   // 테스트용 기능: 투표 없이 강제로 게임 시작
   forceStartGame(gameMode) {
     if (!TEST_MODE) return;
+    
+    console.log(`Force starting game: ${gameMode}`);
+    
+    // 웰컴 화면이 표시되어 있으면 숨김
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+      welcomeScreen.style.display = 'none';
+    }
+    
+    // 게임 컨테이너가 보이는지 확인
+    if (this.container) {
+      this.container.style.display = 'block';
+      console.log('Game container display set to block');
+    }
     
     this.gameMode = gameMode;
     this.round = 1;
