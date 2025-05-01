@@ -1,10 +1,11 @@
-// client/main.js - 테스트 모드 제거 버전
+// client/main.js - 수정된 버전
 import { io } from "socket.io-client";
 import { playSound, startBGM, stopBGM, checkAndPlayBGM } from './soundManager.js';
 import GameManager from './ClientGameManager.js';
 import "./style.css";
 import "./layout.css"; 
 
+// 전역 변수 선언
 let socket;
 let gameManager;
 
@@ -30,6 +31,9 @@ function initialize() {
       <h2>게임 결과</h2>
       <div class="sidebar-results-content">
         <!-- 게임 결과가 이곳에 동적으로 표시됨 -->
+        <div class="sidebar-initial-message">
+          라운드별 게임 결과가 여기에 표시됩니다.
+        </div>
       </div>
     </div>
 
@@ -56,9 +60,9 @@ function initialize() {
         <div class="chat-header">
           <span>게임 메시지</span>
           <div class="chat-controls">
-            <button id="clear-messages" class="control-button">Clear</button>
-            <button id="single-line" class="control-button">1</button>
-            <button id="maximize-chat" class="maximize-button">⛶</button>
+            <button id="clear-messages" class="control-button" title="메시지 지우기">Clear</button>
+            <button id="single-line" class="control-button" title="한 줄 보기">1</button>
+            <button id="maximize-chat" class="maximize-button" title="최대화">⛶</button>
           </div>
         </div>
         <div class="chat-messages"></div>
@@ -72,11 +76,11 @@ function initialize() {
     </div>
   </div>`;
 
-  // 유저 정보 추가
-  appendUser();
-  
-  // 소켓 설정
+  // 소켓 설정 먼저 하기
   setupSocket();
+  
+  // 유저 정보 추가 (소켓 연결 후)
+  appendUser();
   
   // 게임 매니저 초기화
   const gameContainer = document.getElementById('game-screen');
@@ -94,6 +98,9 @@ function initialize() {
   
   // BGM 확인 및 재생
   checkAndPlayBGM();
+  
+  // 초기 시스템 메시지 표시
+  addSystemMessage("게임이 초기화되었습니다. 서버 연결을 기다리는 중...");
 }
 
 
@@ -143,6 +150,13 @@ function setupSocket() {
   });
 
   socket.on("user_informations", ({ liveUsers, userNames, userAvatars, userScores }) => {
+    // 기존 유저 목록 비우기 
+    const usersList = document.getElementById("online-users-list");
+    if (usersList) {
+      usersList.innerHTML = '';
+    }
+    
+    // 받은 유저 정보로 목록 새로 구성
     liveUsers.forEach((userId) => {
       const tempUrl = userAvatars[userId] ? 
         `https://cdn.discordapp.com/avatars/${userId}/${userAvatars[userId]}.png?size=256` : 
@@ -164,7 +178,7 @@ function appendUser() {
   // 아바타 URL 설정
   const avatarUrl = '/images/default-avatar.png'; // 기본 아바타
 
-  // 온라인 목록에 추가
+  // 온라인 목록에 내 유저 추가
   addOnlineUser(thisUserId, thisUserName, avatarUrl);
 
   // #user-info에 유저 프로필 추가
@@ -274,29 +288,56 @@ function handleRoundResultsUpdate(event) {
   const sidebarContent = document.querySelector('.sidebar-results-content');
   if (!sidebarContent) return;
   
-  sidebarContent.innerHTML = `
-    <div class="sidebar-round-title">${round}라운드 결과</div>
-    <table class="sidebar-results-table">
-      <thead>
-        <tr>
-          <th>순위</th>
-          <th>이름</th>
-          <th>점수</th>
-          <th>+/-</th>
+  // 초기 메시지 제거
+  const initialMessage = sidebarContent.querySelector('.sidebar-initial-message');
+  if (initialMessage) {
+    initialMessage.remove();
+  }
+  
+  // 기존 내용을 유지하면서 새 결과 추가
+  const roundTitle = document.createElement('div');
+  roundTitle.className = 'sidebar-round-title';
+  roundTitle.textContent = `${round}라운드 결과`;
+  sidebarContent.appendChild(roundTitle);
+  
+  const resultTable = document.createElement('table');
+  resultTable.className = 'sidebar-results-table';
+  resultTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>이름</th>
+        <th>점수</th>
+        <th>+/-</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${results.map((result, index) => `
+        <tr class="${result.userId === socket.id ? 'my-result' : ''}">
+          <td>${index + 1}</td>
+          <td>${result.userName}</td>
+          <td>${result.score}</td>
+          <td>+${result.pointsAwarded || 0}</td>
         </tr>
-      </thead>
-      <tbody>
-        ${results.map((result, index) => `
-          <tr class="${result.userId === socket.id ? 'my-result' : ''}">
-            <td>${index + 1}</td>
-            <td>${result.userName}</td>
-            <td>${result.score}</td>
-            <td>+${result.pointsAwarded || 0}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
+      `).join('')}
+    </tbody>
   `;
+  sidebarContent.appendChild(resultTable);
+  
+  // 유저 점수 업데이트
+  results.forEach(result => {
+    updateUserScore(result.userId, result.totalScore || 0);
+    
+    // 게임 결과에 따른 상태 업데이트
+    if (result.success === true) {
+      updateUserStatus(result.userId, 'success');
+    } else if (result.success === false) {
+      updateUserStatus(result.userId, 'fail');
+    }
+  });
+  
+  // 스크롤을 최하단으로
+  sidebarContent.scrollTop = sidebarContent.scrollHeight;
 }
 
 // 최종 결과 업데이트 핸들러
@@ -307,41 +348,97 @@ function handleFinalResultsUpdate(event) {
   const sidebarContent = document.querySelector('.sidebar-results-content');
   if (!sidebarContent) return;
   
-  sidebarContent.innerHTML = `
-    <div class="sidebar-round-title">최종 결과</div>
-    <table class="sidebar-results-table">
-      <thead>
-        <tr>
-          <th>순위</th>
-          <th>이름</th>
-          <th>총점</th>
+  // 초기 메시지 제거
+  const initialMessage = sidebarContent.querySelector('.sidebar-initial-message');
+  if (initialMessage) {
+    initialMessage.remove();
+  }
+  
+  // 최종 결과 제목
+  const finalTitle = document.createElement('div');
+  finalTitle.className = 'sidebar-round-title';
+  finalTitle.textContent = '최종 결과';
+  sidebarContent.appendChild(finalTitle);
+  
+  // 최종 결과 테이블
+  const resultTable = document.createElement('table');
+  resultTable.className = 'sidebar-results-table';
+  resultTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>이름</th>
+        <th>총점</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${ranking.map((player, index) => `
+        <tr class="${player.userId === socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
+          <td>${index + 1}</td>
+          <td>${player.userName}</td>
+          <td>${player.score}</td>
         </tr>
-      </thead>
-      <tbody>
-        ${ranking.map((player, index) => `
-          <tr class="${player.userId === socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
-            <td>${index + 1}</td>
-            <td>${player.userName}</td>
-            <td>${player.score}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
+      `).join('')}
+    </tbody>
   `;
+  sidebarContent.appendChild(resultTable);
+  
+  // 유저 최종 점수 업데이트 및 순위에 따른 표시
+  ranking.forEach((player, index) => {
+    updateUserScore(player.userId, player.score);
+    
+    // 1등은 winner 클래스 추가
+    if (index === 0) {
+      const userEl = document.querySelector(`#user-${player.userId}`);
+      if (userEl) {
+        userEl.classList.add('winner');
+      }
+    }
+  });
+  
+  // 점수 순으로 유저 목록 재정렬
+  const usersListContainer = document.querySelector('#online-users-list');
+  if (usersListContainer) {
+    const userItems = Array.from(usersListContainer.querySelectorAll('.online-user-item'));
+    
+    // 점수 기준으로 정렬 (내림차순)
+    userItems.sort((a, b) => {
+      const scoreA = parseInt(a.querySelector('.user-score').textContent) || 0;
+      const scoreB = parseInt(b.querySelector('.user-score').textContent) || 0;
+      return scoreB - scoreA;
+    });
+    
+    // 정렬된 순서로 DOM에 다시 추가
+    userItems.forEach(item => {
+      usersListContainer.appendChild(item);
+    });
+  }
+  
+  // 스크롤을 최하단으로
+  sidebarContent.scrollTop = sidebarContent.scrollHeight;
 }
 
 // 사용자 관리 함수
 function addOnlineUser(userId, username, avatarUrl) {
   if (document.querySelector(`#user-${userId}`)) return;
+  
   const el = document.createElement("div");
   el.className = "online-user-item";
   el.id = `user-${userId}`;
+  
+  // 유저 상태 및 정보 표시
   el.innerHTML = `
-    <div class="user-status"></div>
-    <img src="${avatarUrl}" width="32" height="32" />
+    <div class="user-status" title="접속중"></div>
+    <img src="${avatarUrl}" width="32" height="32" alt="${username}" />
     <span class="user-name">${username}</span>
     <span class="user-score">0</span>
   `;
+  
+  // 내 유저인 경우 표시 (socket.id는 undefined일 수 있으므로 체크)
+  if (socket && userId === socket.id || userId === thisUserId) {
+    el.classList.add('my-result');
+  }
+  
   document.getElementById("online-users-list")?.appendChild(el);
 }
 
@@ -402,8 +499,36 @@ function resetGame() {
   }
 }
 
+// CSS에 필요한 추가 스타일 적용
+function addAdditionalStyles() {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = `
+    .sidebar-initial-message {
+      color: var(--text-secondary);
+      font-style: italic;
+      text-align: center;
+      margin: 20px 0;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.2);
+      border-radius: 5px;
+    }
+    
+    /* 사이드바 내용이 없을 때 스타일 */
+    .sidebar-results-content:empty::before {
+      content: "아직 게임 결과가 없습니다.";
+      display: block;
+      color: var(--text-secondary);
+      font-style: italic;
+      text-align: center;
+      margin: 20px 0;
+    }
+  `;
+  document.head.appendChild(styleElement);
+}
+
 // 애플리케이션 초기화 및 시작
 initialize();
+addAdditionalStyles();
 
 // BGM 확인 및 재생
 checkAndPlayBGM();

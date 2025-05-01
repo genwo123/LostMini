@@ -2,9 +2,7 @@
 
 /* 전체 레이아웃 컨테이너 */
 .layout-container {
-    display: grid;
-    grid-template-columns: 250px 1fr 250px; /* 왼쪽 사이드바, 중앙 콘텐츠, 오른쪽 사이드바 */
-    grid-template-areas: "results-sidebar main-content users-sidebar";
+    display: flex; /* 그리드에서 플렉스박스로 변경 */
     width: 100%;
     height: 100vh;
     overflow: hidden;
@@ -12,7 +10,8 @@
   
   /* 왼쪽 게임 결과 사이드바 */
   .game-results-sidebar {
-    grid-area: results-sidebar;
+    width: 250px;
+    min-width: 250px;
     background-color: var(--bg-secondary);
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     padding: 15px;
@@ -20,12 +19,13 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    z-index: 10;
   }
   
   .game-results-sidebar h2 {
     color: var(--accent-primary);
-    font-size: min(1.2rem, 3vw);
-    margin-bottom: min(1rem, 2vh);
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
     text-align: center;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -36,6 +36,7 @@
     display: flex;
     flex-direction: column;
     padding: 10px 0;
+    overflow-y: auto;
   }
   
   /* 결과 표 스타일 */
@@ -44,6 +45,7 @@
     border-collapse: collapse;
     font-size: 0.9rem;
     margin-top: 15px;
+    margin-bottom: 20px;
   }
   
   .sidebar-results-table th,
@@ -80,11 +82,12 @@
   
   /* 중앙 메인 콘텐츠 영역 */
   .main-content {
-    grid-area: main-content;
+    flex: 1; /* 남은 공간 모두 차지 */
     display: flex;
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
+    position: relative;
   }
   
   .welcome-container {
@@ -114,20 +117,21 @@
   
   /* 오른쪽 유저 목록 사이드바 */
   .online-users {
-    grid-area: users-sidebar;
+    width: 250px;
+    min-width: 250px;
     background-color: var(--bg-secondary);
     border-left: 1px solid rgba(255, 255, 255, 0.1);
     padding: 15px;
     height: 100vh; /* 전체 높이 차지 */
     display: flex; 
     flex-direction: column;
-    width: 250px; /* 명시적 너비 설정 */
+    z-index: 10;
   }
   
   .online-users h2 {
     color: var(--accent-primary);
-    font-size: min(1.2rem, 3vw);
-    margin-bottom: min(1rem, 2vh);
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
     text-align: center;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -169,7 +173,26 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background-color: #4caf50;
+    background-color: #4caf50; /* 기본 상태 색상 */
+  }
+  
+  .user-status.success {
+    background-color: #4CAF50; /* 성공 */
+  }
+  
+  .user-status.fail {
+    background-color: #F44336; /* 실패 */
+  }
+  
+  .user-status.playing {
+    background-color: #FFC107; /* 게임 중 */
+    animation: pulsate 1.5s infinite;
+  }
+  
+  @keyframes pulsate {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
   }
   
   .user-name {
@@ -227,6 +250,7 @@
     max-width: 800px;
     margin: 0 auto;
   }
+
   
   /* 투표 컨테이너 스타일 조정 */
   .voting-container {
@@ -260,6 +284,12 @@
     .online-users {
       width: 200px;
     }
+    
+    .main-content {
+      margin-left: 200px;
+      margin-right: 200px;
+      width: calc(100% - 400px);
+    }
   }
   
   @media (max-width: 992px) {
@@ -271,5 +301,11 @@
     .game-results-sidebar,
     .online-users {
       display: none; /* 모바일에서는 사이드바 숨김 */
+    }
+    
+    .main-content {
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
     }
   }

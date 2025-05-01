@@ -485,93 +485,92 @@ export default class ClientGameManager {
     document.dispatchEvent(finalResultsEvent);
   }
 
-  // 사이드바 라운드 결과 업데이트
-  updateSidebarResults(round, results) {
-    const sidebarContent = document.querySelector('.sidebar-results-content');
-    if (!sidebarContent) return;
-    
-    // 기존 내용 초기화
-    sidebarContent.innerHTML = '';
-    
-    // 라운드 제목 추가
-    const roundTitle = document.createElement('div');
-    roundTitle.className = 'sidebar-round-title';
-    roundTitle.textContent = `${round}라운드 결과`;
-    sidebarContent.appendChild(roundTitle);
-    
-    // 결과 테이블 생성
-    const resultTable = document.createElement('table');
-    resultTable.className = 'sidebar-results-table';
-    resultTable.innerHTML = `
-      <thead>
-        <tr>
-          <th>순위</th>
-          <th>이름</th>
-          <th>점수</th>
-          <th>+/-</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${results.map((result, index) => `
-          <tr class="${result.userId === this.socket.id ? 'my-result' : ''}">
-            <td>${index + 1}</td>
-            <td>${result.userName}</td>
-            <td>${result.score}</td>
-            <td>+${result.pointsAwarded || 0}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    `;
-    sidebarContent.appendChild(resultTable);
-    
-    // 다른 유저들의 점수도 업데이트
-    this.updateUsersScore(results);
-  }
-
-  // 사이드바 최종 결과 업데이트
-  updateSidebarFinalResults(ranking) {
-    const sidebarContent = document.querySelector('.sidebar-results-content');
-    if (!sidebarContent) return;
-    
-    // 기존 내용 초기화
-    sidebarContent.innerHTML = '';
-    
-    // 최종 결과 제목 추가
-    const finalTitle = document.createElement('div');
-    finalTitle.className = 'sidebar-round-title';
-    finalTitle.textContent = '최종 결과';
-    sidebarContent.appendChild(finalTitle);
-    
-    // 결과 테이블 생성
-    const resultTable = document.createElement('table');
-    resultTable.className = 'sidebar-results-table';
-    resultTable.innerHTML = `
-      <thead>
-        <tr>
-          <th>순위</th>
-          <th>이름</th>
-          <th>총점</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${ranking.map((player, index) => `
-          <tr class="${player.userId === this.socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
-            <td>${index + 1}</td>
-            <td>${player.userName}</td>
-            <td>${player.score}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    `;
-    sidebarContent.appendChild(resultTable);
-    
-    // 다른 유저들의 최종 점수 업데이트
-    this.updateUsersFinalScore(ranking);
-  }
+// 라운드 결과 업데이트 부분
+updateSidebarResults(round, results) {
+  const sidebarContent = document.querySelector('.sidebar-results-content');
+  if (!sidebarContent) return;
   
+  // 기존 내용 초기화
+  sidebarContent.innerHTML = '';
+  
+  // 라운드 제목 추가
+  const roundTitle = document.createElement('div');
+  roundTitle.className = 'sidebar-round-title';
+  roundTitle.textContent = `${round}라운드 결과`;
+  sidebarContent.appendChild(roundTitle);
+  
+  // 결과 테이블 생성
+  const resultTable = document.createElement('table');
+  resultTable.className = 'sidebar-results-table';
+  resultTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>이름</th>
+        <th>점수</th>
+        <th>+/-</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${results.map((result, index) => `
+        <tr class="${result.userId === this.socket.id ? 'my-result' : ''}">
+          <td>${index + 1}</td>
+          <td>${result.userName}</td>
+          <td>${result.score}</td>
+          <td>+${result.pointsAwarded || 0}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+  sidebarContent.appendChild(resultTable);
+  
+  // 다른 유저들의 점수도 업데이트
+  this.updateUsersScore(results);
+}
 
- // 새로운 함수: 유저 점수 업데이트 (오른쪽 사이드바)
- updateUsersScore(results) {
+// 사이드바 최종 결과 업데이트
+updateSidebarFinalResults(ranking) {
+  const sidebarContent = document.querySelector('.sidebar-results-content');
+  if (!sidebarContent) return;
+  
+  // 기존 내용 초기화
+  sidebarContent.innerHTML = '';
+  
+  // 최종 결과 제목 추가
+  const finalTitle = document.createElement('div');
+  finalTitle.className = 'sidebar-round-title';
+  finalTitle.textContent = '최종 결과';
+  sidebarContent.appendChild(finalTitle);
+  
+  // 결과 테이블 생성
+  const resultTable = document.createElement('table');
+  resultTable.className = 'sidebar-results-table';
+  resultTable.innerHTML = `
+    <thead>
+      <tr>
+        <th>순위</th>
+        <th>이름</th>
+        <th>총점</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${ranking.map((player, index) => `
+        <tr class="${player.userId === this.socket.id ? 'my-result' : ''} ${index === 0 ? 'winner' : ''}">
+          <td>${index + 1}</td>
+          <td>${player.userName}</td>
+          <td>${player.score}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+  sidebarContent.appendChild(resultTable);
+  
+  // 다른 유저들의 최종 점수 업데이트
+  this.updateUsersFinalScore(ranking);
+}
+
+// 유저 점수 업데이트 (오른쪽 사이드바)
+updateUsersScore(results) {
   // 각 유저별로 점수 업데이트
   results.forEach(result => {
     const userScoreElement = document.querySelector(`#user-${result.userId} .user-score`);
@@ -590,7 +589,7 @@ export default class ClientGameManager {
   });
 }
 
-// 새로운 함수: 최종 점수 업데이트 (오른쪽 사이드바)
+// 최종 점수 업데이트 (오른쪽 사이드바)
 updateUsersFinalScore(ranking) {
   // 순위에 따라 유저 목록 정렬 및 점수 업데이트
   ranking.forEach((player, index) => {
@@ -633,7 +632,6 @@ updateUsersFinalScore(ranking) {
     usersListContainer.appendChild(item);
   });
 }
-  
   // 게임 리셋
   resetGame() {
     this.round = 0;
