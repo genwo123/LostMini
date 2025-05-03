@@ -522,9 +522,76 @@ function addAdditionalStyles() {
       text-align: center;
       margin: 20px 0;
     }
+    
+    /* 레이아웃 컨테이너의 전체 높이 설정 (오버플로우 방지) */
+    .layout-container {
+      height: 100% !important; 
+      min-height: 100% !important;
+      overflow: hidden !important;
+    }
+    
+    /* 왼쪽 사이드바 높이 설정 */
+    .game-results-sidebar {
+      display: flex !important;
+      flex-direction: column !important;
+      height: 100% !important;
+      min-height: 100% !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+    
+    /* 오른쪽 사이드바 확인 */
+    .online-users {
+      height: 100% !important;
+      min-height: 100% !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+    
+    /* 중앙 컨텐츠 영역 조정 */
+    .main-content {
+      height: 100% !important;
+      min-height: 100% !important;
+      overflow-y: auto !important;
+    }
+    
+    /* 사이드바 내용 영역 */
+    .sidebar-results-content {
+      flex: 1 1 auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow-y: auto !important;
+    }
+    
+    /* 더미 공간 스타일 */
+    .dummy-space {
+      flex: 1 !important;
+    }
+    
+    /* body 스타일 조정 */
+    body, html {
+      height: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+    }
+    
+    #app {
+      height: 100% !important;
+      overflow: hidden !important;
+    }
   `;
   document.head.appendChild(styleElement);
+  
+  // 왼쪽 사이드바에 더미 공간 요소 추가
+  const contentArea = document.querySelector('.sidebar-results-content');
+  if (contentArea && !contentArea.querySelector('.dummy-space')) {
+    const dummySpace = document.createElement('div');
+    dummySpace.className = 'dummy-space';
+    contentArea.appendChild(dummySpace);
+  }
 }
+
 
 // 애플리케이션 초기화 및 시작
 initialize();

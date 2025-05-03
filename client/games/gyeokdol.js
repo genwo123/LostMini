@@ -4,14 +4,278 @@
 import { playSound } from '../soundManager.js';
 
 export function injectGyeokdolStyles() {
-  // 이미 로드된 CSS인지 확인 (중복 로드 방지)
+  // 이미 로드된 스타일인지 확인 (중복 로드 방지)
   if (!document.getElementById('gyeokdol-styles')) {
-    const linkElement = document.createElement('link');
-    linkElement.id = 'gyeokdol-styles';
-    linkElement.rel = 'stylesheet';
-    linkElement.type = 'text/css';
-    linkElement.href = '/client/games/gyeokdol.css'; // CSS 파일 경로 (프로젝트 구조에 맞게 조정 필요)
-    document.head.appendChild(linkElement);
+    const styleElement = document.createElement('style');
+    styleElement.id = 'gyeokdol-styles';
+    styleElement.textContent = `
+      .gyeokdol-container {
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: rgba(0, 0, 0, 0.7);
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        position: relative;
+      }
+      
+      .gyeokdol-container.kamen-mode {
+        background-color: rgba(40, 0, 80, 0.8);
+        box-shadow: 0 0 20px rgba(128, 0, 255, 0.4);
+      }
+      
+      .difficulty-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: #ff9800;
+        color: black;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-weight: bold;
+      }
+      
+      .timer-display {
+        font-size: 20px;
+        margin: 10px 0;
+        color: #ff9800;
+      }
+      
+      .progress-display {
+        margin: 15px 0;
+      }
+      
+      .progress-text {
+        margin-bottom: 5px;
+        font-size: 16px;
+      }
+      
+      .progress-bar {
+        height: 10px;
+        background-color: #333;
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      
+      .progress-fill {
+        height: 100%;
+        background-color: #4caf50;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+      
+      .score-display {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 15px 0;
+        padding: 5px 10px;
+        background-color: rgba(0, 0, 0, 0.3);
+        border-radius: 5px;
+      }
+      
+      .stats {
+        display: flex;
+        gap: 10px;
+        font-size: 14px;
+      }
+      
+      .perfect {
+        color: #4caf50;
+      }
+      
+      .good {
+        color: #2196f3;
+      }
+      
+      .miss {
+        color: #f44336;
+      }
+      
+      .ring-container {
+        position: relative;
+        height: 300px;
+        margin: 20px auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      
+      .ring-position {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      
+      .ring-left {
+        left: 20%;
+      }
+      
+      .ring-center {
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      
+      .ring-right {
+        right: 20%;
+      }
+      
+      .target-ring {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        border: 5px solid #4caf50;
+        border-radius: 50%;
+        z-index: 1;
+      }
+      
+      .gyeokdol-container.kamen-mode .target-ring {
+        border-color: #9c27b0;
+        box-shadow: 0 0 10px rgba(156, 39, 176, 0.6);
+      }
+      
+      .moving-ring {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        border: 3px solid #ff9800;
+        border-radius: 50%;
+        z-index: 2;
+        transform: scale(3);
+        transition: opacity 0.3s ease;
+        opacity: 0;
+      }
+      
+      .moving-ring.active {
+        opacity: 1;
+      }
+      
+      .gyeokdol-container.kamen-mode .moving-ring {
+        border-color: #e91e63;
+        box-shadow: 0 0 10px rgba(233, 30, 99, 0.4);
+      }
+      
+      .key-display {
+        position: absolute;
+        z-index: 3;
+        font-size: 36px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 0 0 5px black;
+      }
+      
+      .hit-indicator {
+        font-size: 36px;
+        font-weight: bold;
+        height: 40px;
+        opacity: 0;
+      }
+      
+      .hit-indicator.perfect {
+        color: #4caf50;
+      }
+      
+      .hit-indicator.good {
+        color: #2196f3;
+      }
+      
+      .hit-indicator.miss {
+        color: #f44336;
+      }
+      
+      .hit-indicator.wrong {
+        color: #9c27b0;
+        font-size: 24px;
+      }
+      
+      .hint-text {
+        margin: 20px 0;
+        font-style: italic;
+        color: #aaa;
+      }
+      
+      .result-container {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 8px;
+        background-color: rgba(33, 150, 243, 0.3);
+        animation: fade-in 0.5s ease;
+      }
+      
+      .gyeokdol-container.kamen-mode .result-container {
+        background-color: rgba(156, 39, 176, 0.3);
+      }
+      
+      .result-grade {
+        font-size: 72px;
+        font-weight: bold;
+        margin: 10px 0;
+        text-shadow: 0 0 10px currentColor;
+      }
+      
+      .grade-s {
+        color: #FFD700;
+      }
+      
+      .grade-a {
+        color: #C0C0C0;
+      }
+      
+      .grade-b {
+        color: #CD7F32;
+      }
+      
+      .grade-c {
+        color: #4CAF50;
+      }
+      
+      .grade-d {
+        color: #F44336;
+      }
+      
+      .result-details {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 15px;
+      }
+      
+      .result-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 20px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 5px;
+      }
+      
+      .total-score {
+        font-size: 18px;
+        font-weight: bold;
+        background-color: rgba(76, 175, 80, 0.3);
+        margin-top: 10px;
+      }
+      
+      .gyeokdol-container.kamen-mode .total-score {
+        background-color: rgba(156, 39, 176, 0.3);
+      }
+      
+      @keyframes pop-in-out {
+        0% { transform: scale(0.5); opacity: 0; }
+        50% { transform: scale(1.2); opacity: 1; }
+        100% { transform: scale(1); opacity: 0; }
+      }
+      
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    `;
+    document.head.appendChild(styleElement);
   }
 }
 
@@ -135,9 +399,6 @@ export default class GyeokdolGame {
   
   // 일반 격돌 패턴 생성 함수 업데이트
 generateRegularPatterns() {
-  // 라운드별 패턴 수
-  this.totalPatterns = this.difficulty === 'normal' ? 8 : 12;
-  
   // 패턴 템플릿 (타이밍/키 sequence)
   // [키, 지속시간(ms), 위치]의 배열로 구성
   
@@ -196,27 +457,16 @@ generateRegularPatterns() {
     ]
   ];
   
-  // 난이도에 따라 패턴 선택
+  // 난이도에 따라 패턴 셋 선택
   const patternSet = this.difficulty === 'normal' ? normalPatterns : hardPatterns;
   
-  // 필요한 수만큼 패턴 랜덤 선택 및 수정
-  this.patternSequences = [];
-  for (let i = 0; i < this.totalPatterns; i++) {
-    // 패턴 랜덤 선택 - 깊은 복사 사용
-    const randomPattern = JSON.parse(JSON.stringify(patternSet[Math.floor(Math.random() * patternSet.length)]));
-    
-    // 난이도에 따른 속도 조정 (라운드가 올라갈수록 빨라짐)
-    const speedMultiplier = 1 - (Math.min(i, 7) * 0.05); // 최대 35% 빨라짐
-    
-    // 패턴 속도 조정
-    const adjustedPattern = randomPattern.map(([key, time, position]) => [
-      key,
-      Math.max(600, Math.floor(time * speedMultiplier)), // 최소 600ms
-      position
-    ]);
-    
-    this.patternSequences.push(adjustedPattern);
-  }
+  // 패턴 중 하나만 랜덤으로 선택
+  const randomPatternIndex = Math.floor(Math.random() * patternSet.length);
+  const selectedPattern = JSON.parse(JSON.stringify(patternSet[randomPatternIndex]));
+  
+  // 선택된 패턴을 사용
+  this.patternSequences = [selectedPattern];
+  this.totalPatterns = 1; // 총 패턴 수는 1개
 }
 
 // 카멘 격돌 패턴 생성 함수 업데이트
@@ -375,72 +625,78 @@ generateKamenPatterns() {
 }
   
   // 게임 UI 생성 함수 업데이트
-createGameUI() {
-  // 메인 컨테이너
-  const gameArea = document.createElement('div');
-  gameArea.className = 'gyeokdol-container';
-  
-  // 카멘 모드일 경우 스타일 추가
-  if (this.isKamen) {
-    gameArea.classList.add('kamen-mode');
+  createGameUI() {
+    // 메인 컨테이너
+    const gameArea = document.createElement('div');
+    gameArea.className = 'gyeokdol-container';
+    
+    // 카멘 모드일 경우 스타일 추가
+    if (this.isKamen) {
+      gameArea.classList.add('kamen-mode');
+    }
+    
+    let gameTitle = '격돌';
+    if (this.isKamen) {
+      gameTitle = `카멘 ${this.kamenGate}관문 격돌`;
+    }
+    
+    gameArea.innerHTML = `
+      <h2>${gameTitle}</h2>
+      <div class="difficulty-badge">${this.difficulty === 'normal' ? '노말' : '하드'}</div>
+      <div class="timer-display">남은 시간: <span id="gyeokdol-timer">${this.timeLimit}</span>초</div>
+      
+      <div class="progress-display">
+        <div class="progress-text">패턴: <span id="pattern-count">1</span>/${this.totalPatterns}</div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${(this.currentPatternIndex/this.totalPatterns) * 100}%"></div>
+        </div>
+      </div>
+      
+      <div class="score-display">
+        <div>점수: <span id="gyeokdol-score">0</span></div>
+        <div class="stats">
+          <span class="perfect">PERFECT: <span id="perfect-count">0</span></span>
+          <span class="good">GOOD: <span id="good-count">0</span></span>
+          <span class="miss">MISS: <span id="miss-count">0</span></span>
+        </div>
+      </div>
+      
+      <div class="ring-container">
+        <div class="ring-position ring-left">
+          <div class="target-ring"></div>
+          <div class="moving-ring" data-position="left"></div>
+          <div class="key-display"></div>
+        </div>
+        <div class="ring-position ring-center">
+          <div class="target-ring"></div>
+          <div class="moving-ring" data-position="center"></div>
+          <div class="key-display"></div>
+        </div>
+        <div class="ring-position ring-right">
+          <div class="target-ring"></div>
+          <div class="moving-ring" data-position="right"></div>
+          <div class="key-display"></div>
+        </div>
+      </div>
+      
+      <div class="hit-indicator"></div>
+      
+      <div class="hint-text">
+        ${this.difficulty === 'normal' 
+          ? 'Q, W, E, R 키를 정확한 타이밍에 눌러주세요!' 
+          : 'Q, W, E, R, A, S, D, F 키를 정확한 타이밍에 눌러주세요!'}
+        <br>다양한 위치에 표시되는 원을 따라가세요!
+      </div>
+    `;
+    
+    this.gameContainer.appendChild(gameArea);
+    
+    // 현재 패턴 카운트 업데이트
+    const patternCountElement = document.getElementById('pattern-count');
+    if (patternCountElement) {
+      patternCountElement.textContent = this.currentPatternIndex + 1;
+    }
   }
-  
-  let gameTitle = '격돌';
-  if (this.isKamen) {
-    gameTitle = `카멘 ${this.kamenGate}관문 격돌`;
-  }
-  
-  gameArea.innerHTML = `
-    <h2>${gameTitle}</h2>
-    <div class="difficulty-badge">${this.difficulty === 'normal' ? '노말' : '하드'}</div>
-    <div class="timer-display">남은 시간: <span id="gyeokdol-timer">${this.timeLimit}</span>초</div>
-    
-    <div class="progress-display">
-      <div class="progress-text">패턴: <span id="pattern-count">1</span>/${this.totalPatterns}</div>
-      <div class="progress-bar">
-        <div class="progress-fill" style="width: ${(this.currentPatternIndex/this.totalPatterns) * 100}%"></div>
-      </div>
-    </div>
-    
-    <div class="score-display">
-      <div>점수: <span id="gyeokdol-score">0</span></div>
-      <div class="stats">
-        <span class="perfect">PERFECT: <span id="perfect-count">0</span></span>
-        <span class="good">GOOD: <span id="good-count">0</span></span>
-        <span class="miss">MISS: <span id="miss-count">0</span></span>
-      </div>
-    </div>
-    
-    <div class="ring-container">
-      <div class="ring-left">
-        <div class="target-ring"></div>
-        <div class="moving-ring"></div>
-        <div class="key-display"></div>
-      </div>
-      <div class="ring-center">
-        <div class="target-ring"></div>
-        <div class="moving-ring"></div>
-        <div class="key-display"></div>
-      </div>
-      <div class="ring-right">
-        <div class="target-ring"></div>
-        <div class="moving-ring"></div>
-        <div class="key-display"></div>
-      </div>
-    </div>
-    
-    <div class="hit-indicator"></div>
-    
-    <div class="hint-text">
-      ${this.difficulty === 'normal' 
-        ? 'Q, W, E, R 키를 정확한 타이밍에 눌러주세요!' 
-        : 'Q, W, E, R, A, S, D, F 키를 정확한 타이밍에 눌러주세요!'}
-      <br>다양한 위치에 표시되는 원을 따라가세요!
-    </div>
-  `;
-  
-  this.gameContainer.appendChild(gameArea);
-}
 
 // 타이머 시작
 startTimer() {
@@ -553,6 +809,8 @@ renderRing(ring) {
       keyDisplay.textContent = ring.key.toUpperCase();
       keyDisplay.style.opacity = '1';
     }
+  } else {
+    console.error(`링 요소를 찾을 수 없음: position=${position}`);
   }
 }
 
@@ -565,10 +823,15 @@ startNextPattern() {
   // 패턴 내 키 인덱스 초기화
   this.keySequenceIndex = 0;
   
+  // 현재 패턴 카운트 업데이트
+  const patternCountElement = document.getElementById('pattern-count');
+  if (patternCountElement) {
+    patternCountElement.textContent = this.currentPatternIndex + 1;
+  }
+  
   // 다음 키 시작
   this.showNextKey();
 }
-
 // 다음 키 표시 (연속 키 및 위치 지원)
 showNextKey() {
   // 현재 패턴에서 다음 키 가져오기
@@ -734,6 +997,22 @@ handleGood(ring) {
   
   // 점수 업데이트
   this.updateScore();
+}
+
+// 링 비활성화 함수
+deactivateRing(position) {
+  const ringElement = document.querySelector(`.moving-ring[data-position="${position}"]`);
+  if (ringElement) {
+    ringElement.style.opacity = '0';
+    ringElement.classList.remove('active');
+    
+    // 키 표시 숨기기
+    const keyDisplay = ringElement.parentElement.querySelector('.key-display');
+    if (keyDisplay) {
+      keyDisplay.style.opacity = '0';
+      keyDisplay.textContent = '';
+    }
+  }
 }
 
 // Miss 판정 처리

@@ -1,6 +1,6 @@
 // client/games/starForce.js
 // 스타포스 게임 로직: 왔다갔다 움직이는 바에서 정확한 타이밍에 키 입력하기
-// 수정된 버전: 제한시간 내 재시도 가능, 연타 방지, 타이머 표시
+// 개선된 버전: 다중 포인트 시스템, 난이도별 설정, 속도 향상
 
 import { playSound } from '../soundManager.js';
 
@@ -12,20 +12,26 @@ export default class StarForceGame {
     this.difficulty = 'normal'; // 'normal' 또는 'hard'
     this.barPosition = 0; // 0-100 사이 값
     this.barDirection = 1; // 1: 오른쪽, -1: 왼쪽
-    this.barSpeed = 2.5; // 기본 속도 (빠르게 설정)
+    this.barSpeed = 3.5; // 기본 속도 (상향 조정)
     this.barWidth = 8; // 바의 너비 (px)
     this.animationFrame = null;
     this.lastFrameTime = 0;
     this.startTime = 0;
     this.endTime = 0;
     this.success = false;
-    this.keyToPress = 'space'; // 기본은 스페이스바
     this.inputCooldown = false; // 입력 쿨다운 상태
     this.failCount = 0; // 실패 횟수
     this.timerInterval = null;
-    this.timeLimit = 10; // 제한시간 10초
-    this.timeLeft = 10;
+    this.timeLimit = 15; // 제한시간 15초
+    this.timeLeft = 15;
     this.lastTick = null;
+    
+    // 다중 타겟 지원을 위한 새 변수
+    this.targetZones = []; // 타겟 영역 목록
+    this.completedTargets = []; // 완료된 타겟 인덱스
+    this.currentTargetIndex = 0; // 현재 타겟 인덱스
+    this.maxTargets = 1; // 최대 타겟 수 (난이도에 따라 조정)
+    this.keyToPress = ['space']; // 기본은 스페이스바 (배열로 변경)
     
     // 난이도별 타겟 영역 위치 조정
     // normal: 40-60이 성공
@@ -59,26 +65,44 @@ export default class StarForceGame {
     this.barDirection = 1;
     this.success = false;
     this.failCount = 0;
-    this.timeLimit = 10;
+    this.timeLimit = 15; // 시간 약간 증가
     this.timeLeft = this.timeLimit;
     this.inputCooldown = false;
+    this.targetZones = [];
+    this.completedTargets = [];
+    this.currentTargetIndex = 0;
     
     // 난이도에 따른 설정
     if (this.difficulty === 'normal') {
-      this.barSpeed = 2.5;
-      this.keyToPress = 'space';
+      this.barSpeed = 3.5; // 속도 상향
+      this.keyToPress = ['space']; // 스페이스바만
       this.targetStart = this.targetStartNormal;
       this.targetEnd = this.targetEndNormal;
       this.barWidth = 8;
+      this.maxTargets = 1; // 1단계는 타겟 1개
     } else {
-      this.barSpeed = 3.5;
-      // 8개 키 중 랜덤 선택
+      this.barSpeed = 4.5; // 하드 모드는 더 빠르게
+      
+      // 타겟 수 결정 (2~3개)
+      this.maxTargets = data.level && data.level > 3 ? 3 : 2;
+      
+      // 각 타겟마다 다른 랜덤 키 지정
+      this.keyToPress = [];
       const possibleKeys = ['q', 'w', 'e', 'r', 'a', 's', 'd', 'f'];
-      this.keyToPress = possibleKeys[Math.floor(Math.random() * possibleKeys.length)];
+      
+      for (let i = 0; i < this.maxTargets; i++) {
+        // 이미 선택된 키는 제외하고 랜덤 선택
+        const remainingKeys = possibleKeys.filter(key => !this.keyToPress.includes(key));
+        this.keyToPress.push(remainingKeys[Math.floor(Math.random() * remainingKeys.length)]);
+      }
+      
       this.targetStart = this.targetStartHard;
       this.targetEnd = this.targetEndHard;
       this.barWidth = 6; // 하드 모드에서는 바를 더 얇게
     }
+    
+    // 타겟 영역 생성
+    this.generateTargetZones();
     
     // UI 생성
     this.createGameUI();
@@ -98,10 +122,33 @@ export default class StarForceGame {
     playSound('start');
     
     // 시스템 메시지로 게임 시작 알림
+    const targetCount = this.maxTargets > 1 ? `${this.maxTargets}개의 포인트에서 ` : '';
+    const keyMsg = this.difficulty === 'normal' ? 
+      '스페이스바' : 
+      `각 포인트마다 ${this.keyToPress.map(k => k.toUpperCase()).join(', ')} 키`;
+    
     const messageEvent = new CustomEvent('system-message', {
-      detail: { message: `스타포스 게임이 시작되었습니다! ${this.difficulty === 'normal' ? '스페이스바' : this.keyToPress.toUpperCase() + ' 키'}를 정확한 타이밍에 누르세요!` }
+      detail: { message: `스타포스 게임이 시작되었습니다! ${targetCount}${keyMsg}를 정확한 타이밍에 누르세요!` }
     });
     document.dispatchEvent(messageEvent);
+  }
+  
+  // 타겟 영역 생성
+  generateTargetZones() {
+    this.targetZones = [];
+    
+    // 1~3개 타겟 생성 (난이도와 레벨에 따라)
+    for (let i = 0; i < this.maxTargets; i++) {
+      // 바에서 타겟 위치 결정 (균등하게 분배)
+      const position = 20 + Math.floor((60 / this.maxTargets) * i);
+      
+      this.targetZones.push({
+        start: position,
+        end: position + (this.difficulty === 'normal' ? 20 : 10),
+        completed: false,
+        key: this.keyToPress[i]
+      });
+    }
   }
   
   // 게임 UI 생성
@@ -114,18 +161,32 @@ export default class StarForceGame {
       <div class="difficulty-badge">${this.difficulty === 'normal' ? '노말' : '하드'}</div>
       <div class="timer-display">남은 시간: <span id="starforce-timer">${this.timeLimit}</span>초</div>
       <div class="score-display">
-        눌러야 할 키: <span class="key-to-press">${this.keyToPress === 'space' ? 'Space Bar' : this.keyToPress.toUpperCase()}</span>
+        <div>
+          눌러야 할 키: 
+          ${this.keyToPress.map((key, index) => 
+            `<span class="key-to-press" data-index="${index}" 
+             style="${this.currentTargetIndex === index ? '' : 'opacity: 0.5;'}">
+             ${key === 'space' ? 'Space Bar' : key.toUpperCase()}
+             </span>`
+          ).join(' ')}
+        </div>
         <div class="fail-count">실패: <span id="fail-count">0</span>회</div>
       </div>
       <div class="bar-container">
         <div class="bar-track">
-          <div class="target-zone"></div>
+          ${this.targetZones.map((zone, index) => 
+            `<div class="target-zone" id="target-${index}" 
+             style="left: ${zone.start}%; width: ${zone.end - zone.start}%;" 
+             data-key="${zone.key}">
+             ${zone.key === 'space' ? 'Space' : zone.key.toUpperCase()}
+             </div>`
+          ).join('')}
           <div class="moving-bar" style="left: 0%; width: ${this.barWidth}px;"></div>
         </div>
         <div class="key-hint">
           ${this.difficulty === 'normal' 
             ? '스페이스바를 정확한 타이밍에 눌러주세요!' 
-            : `${this.keyToPress.toUpperCase()} 키를 정확한 타이밍에 눌러주세요!`}
+            : `표시된 키를 순서대로 정확한 타이밍에 눌러주세요!`}
         </div>
       </div>
       <div class="hit-indicator"></div>
@@ -134,24 +195,84 @@ export default class StarForceGame {
     
     this.gameContainer.appendChild(gameArea);
     
-    // 타겟 영역 설정
-    const targetZone = document.querySelector('.target-zone');
+    // 타겟 영역 CSS 스타일 보강
+    const style = document.createElement('style');
+    style.textContent = `
+      .target-zone {
+        position: absolute;
+        height: 100%;
+        background-color: rgba(103, 58, 183, 0.5);
+        border-radius: 0;
+        z-index: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: rgba(255, 255, 255, 0.7);
+        font-weight: bold;
+        transition: all 0.3s ease;
+      }
+      
+      .target-zone.completed {
+        background-color: rgba(76, 175, 80, 0.2);
+        color: rgba(76, 175, 80, 0.4);
+      }
+      
+      .target-zone.current {
+        background-color: rgba(103, 58, 183, 0.7);
+        color: white;
+      }
+      
+      .key-to-press {
+        background-color: rgba(158, 41, 176, 0.2);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        color: #bb86fc;
+        display: inline-block;
+        margin: 0 5px;
+        transition: all 0.3s ease;
+      }
+      
+      .key-to-press.active {
+        background-color: rgba(158, 41, 176, 0.5);
+        transform: scale(1.1);
+      }
+    `;
+    document.head.appendChild(style);
     
-    if (targetZone) {
-      targetZone.style.left = `${this.targetStart}%`;
-      targetZone.style.width = `${this.targetEnd - this.targetStart}%`;
-    }
+    // 현재 타겟 영역 강조
+    this.updateTargetHighlight();
+  }
+  
+  // 현재 타겟 영역 강조
+  updateTargetHighlight() {
+    // 모든 타겟 영역 강조 해제
+    document.querySelectorAll('.target-zone').forEach(zone => {
+      zone.classList.remove('current');
+    });
     
-    // 키 표시 강조 스타일
-    const keyDisplay = document.querySelector('.key-to-press');
-    if (keyDisplay) {
-      keyDisplay.style.backgroundColor = 'rgba(158, 41, 176, 0.2)';
-      keyDisplay.style.padding = '2px 8px';
-      keyDisplay.style.borderRadius = '4px';
-      keyDisplay.style.fontWeight = 'bold';
-      keyDisplay.style.color = '#bb86fc';
-      keyDisplay.style.display = 'inline-block';
-      keyDisplay.style.fontSize = '1.2em';
+    // 모든 키 표시 강조 해제
+    document.querySelectorAll('.key-to-press').forEach(key => {
+      key.classList.remove('active');
+    });
+    
+    // 완료되지 않은 타겟 찾기
+    const nextTarget = this.targetZones.findIndex(zone => !zone.completed);
+    
+    if (nextTarget !== -1) {
+      this.currentTargetIndex = nextTarget;
+      
+      // 현재 타겟 강조
+      const targetEl = document.getElementById(`target-${nextTarget}`);
+      if (targetEl) {
+        targetEl.classList.add('current');
+      }
+      
+      // 현재 키 강조
+      const keyEl = document.querySelector(`.key-to-press[data-index="${nextTarget}"]`);
+      if (keyEl) {
+        keyEl.classList.add('active');
+      }
     }
   }
   
@@ -245,73 +366,98 @@ export default class StarForceGame {
     if (!this.isGameActive || this.inputCooldown || this.success) return;
     
     const pressedKey = event.key.toLowerCase();
+    const expectedKey = this.getCurrentTargetKey();
     
-    // 키 검증 (난이도에 따라 다름)
-    let isValidKey = false;
+    // 스페이스바 처리
+    const isSpace = pressedKey === ' ' || pressedKey === 'spacebar';
     
-    if (this.difficulty === 'normal') {
-      isValidKey = pressedKey === ' ' || pressedKey === 'spacebar';
-    } else {
-      isValidKey = pressedKey === this.keyToPress;
+    // 기대하는 키와 입력된 키 비교
+    const isCorrectKey = (expectedKey === 'space' && isSpace) || pressedKey === expectedKey;
+    
+    if (!isCorrectKey) {
+      // 잘못된 키 입력
+      this.showHitIndicator('miss', `${isSpace ? 'Space' : pressedKey.toUpperCase()}는 잘못된 키입니다!`);
+      playSound('user');
+      this.failCount++;
+      this.updateFailCount();
+      return;
     }
     
-    if (!isValidKey) return;
+    // 현재 타겟 영역 확인
+    const currentTarget = this.targetZones[this.currentTargetIndex];
     
-    // 유효한 키가 눌렸으면 결과 판정
-    this.checkResult();
+    // 바가 타겟 영역 안에 있는지 확인
+    if (this.barPosition >= currentTarget.start && this.barPosition <= currentTarget.end) {
+      // 성공
+      this.completeTarget(this.currentTargetIndex);
+    } else {
+      // 타이밍 실패
+      this.showHitIndicator('miss', "타이밍 실패!");
+      playSound('user');
+      this.failCount++;
+      this.updateFailCount();
+    }
   }
   
-  // 결과 확인
-  checkResult() {
-    // 현재 바 위치가 목표 영역 내에 있는지 확인
-    const isSuccess = (this.barPosition >= this.targetStart && this.barPosition <= this.targetEnd);
+  // 현재 타겟 키 가져오기
+  getCurrentTargetKey() {
+    if (this.currentTargetIndex < this.targetZones.length) {
+      return this.targetZones[this.currentTargetIndex].key;
+    }
+    return 'space'; // 기본값
+  }
+  
+  // 실패 카운트 업데이트
+  updateFailCount() {
+    const failCountElement = document.getElementById('fail-count');
+    if (failCountElement) {
+      failCountElement.textContent = this.failCount;
+    }
+  }
+  
+  // 타겟 완료 처리
+  completeTarget(index) {
+    // 타겟 완료 표시
+    this.targetZones[index].completed = true;
+    this.completedTargets.push(index);
     
-    if (isSuccess) {
-      // 성공 시
+    // 타겟 UI 업데이트
+    const targetEl = document.getElementById(`target-${index}`);
+    if (targetEl) {
+      targetEl.classList.add('completed');
+      targetEl.classList.remove('current');
+    }
+    
+    // 성공 표시
+    this.showHitIndicator('perfect', "성공!");
+    playSound('move');
+    
+    // 다음 타겟으로 이동
+    this.updateTargetHighlight();
+    
+    // 모든 타겟 완료 확인
+    const allCompleted = this.targetZones.every(zone => zone.completed);
+    
+    if (allCompleted) {
+      // 모든 타겟 완료 시 게임 성공
       this.success = true;
       this.endTime = Date.now();
-      this.showResult(true);
       
-      // 성공했으므로 게임 종료
+      // 1초 후 게임 종료
       setTimeout(() => {
         this.endGame();
       }, 1000);
-    } else {
-      // 실패 시
-      this.failCount++;
-      this.showResult(false);
-      
-      // 실패 횟수 업데이트
-      const failCountElement = document.getElementById('fail-count');
-      if (failCountElement) {
-        failCountElement.textContent = this.failCount;
-      }
-      
-      // 입력 쿨다운 설정 (0.8초)
-      this.inputCooldown = true;
-      setTimeout(() => {
-        this.inputCooldown = false;
-        
-        // 실패 표시 지우기
-        const hitIndicator = document.querySelector('.hit-indicator');
-        if (hitIndicator) {
-          hitIndicator.textContent = '';
-        }
-      }, 800);
     }
   }
   
   // 결과 표시
-  showResult(isSuccess) {
+  showHitIndicator(type, text) {
     const hitIndicator = document.querySelector('.hit-indicator');
     
-    const resultText = isSuccess ? '성공!' : '실패!';
-    const resultClass = isSuccess ? 'success' : 'fail';
-    
     if (hitIndicator) {
-      hitIndicator.textContent = resultText;
+      hitIndicator.textContent = text;
       hitIndicator.className = 'hit-indicator';
-      hitIndicator.classList.add(resultClass);
+      hitIndicator.classList.add(type);
       
       // 애니메이션 효과
       hitIndicator.style.animation = 'none';
@@ -319,9 +465,6 @@ export default class StarForceGame {
         hitIndicator.style.animation = 'scale-pop 0.5s ease-out';
       }, 10);
     }
-    
-    // 사운드 재생
-    playSound(isSuccess ? 'goal' : 'user');
   }
   
   // 게임 종료
@@ -344,25 +487,28 @@ export default class StarForceGame {
     document.removeEventListener('keydown', this.handleKeyDown);
     
     // 마지막 시간 기록 (성공하지 못한 경우)
-    if (!this.success) {
+    if (!this.endTime) {
       this.endTime = Date.now();
     }
     
     // 소요 시간 계산
     const timeElapsed = (this.endTime - this.startTime) / 1000;
     
-    // 점수 계산
-    // 성공 시: 기본 100점 + 난이도 보너스(하드는 +50) + 속도 보너스(빨리 성공할수록 높은 점수) - 실패 패널티(실패당 10점)
-    // 실패 시: 10점
+    // 점수 계산 업데이트
+    // 성공 시: 기본 100점 + 타겟당 보너스(50점) + 난이도 보너스(하드는 +50) + 속도 보너스 - 실패 패널티
+    // 실패 시: 완료한 타겟당 30점
     let score = 0;
     
     if (this.success) {
+      const targetBonus = this.completedTargets.length * 50; // 타겟당 50점
       const difficultyBonus = this.difficulty === 'hard' ? 50 : 0;
-      const timeBonus = Math.max(0, Math.floor((this.timeLimit - timeElapsed) * 10)); // 남은 시간당 10점 보너스
+      const timeBonus = Math.max(0, Math.floor((this.timeLimit - timeElapsed) * 10)); // 남은 시간당 10점
       const failPenalty = this.failCount * 10; // 실패당 10점 감점
-      score = Math.max(10, 100 + difficultyBonus + timeBonus - failPenalty);
+      
+      score = Math.max(10, 100 + targetBonus + difficultyBonus + timeBonus - failPenalty);
     } else {
-      score = 10; // 실패 시 기본 점수
+      // 일부 완료 시에도 점수 부여
+      score = Math.max(10, this.completedTargets.length * 30);
     }
     
     // 결과 UI 표시
@@ -375,13 +521,15 @@ export default class StarForceGame {
       score: score,
       timeMs: Math.round((this.endTime - this.startTime)),
       success: this.success,
-      failCount: this.failCount
+      failCount: this.failCount,
+      completedTargets: this.completedTargets.length,
+      totalTargets: this.maxTargets
     });
     
     // 시스템 메시지로 결과 알림
     const resultMessage = this.success 
       ? `스타포스 게임을 성공했습니다! 점수: ${score}점`
-      : `스타포스 게임을 실패했습니다. 점수: ${score}점`;
+      : `스타포스 게임을 ${this.completedTargets.length}/${this.maxTargets} 포인트 완료했습니다. 점수: ${score}점`;
       
     const messageEvent = new CustomEvent('system-message', {
       detail: { message: resultMessage }
@@ -397,7 +545,7 @@ export default class StarForceGame {
       <h3>${this.success ? '성공!' : '실패!'}</h3>
       <div class="result-details">
         <p>난이도: ${this.difficulty === 'normal' ? '노말' : '하드'}</p>
-        <p>키: ${this.keyToPress === 'space' ? 'Space Bar' : this.keyToPress.toUpperCase()}</p>
+        <p>완료한 포인트: ${this.completedTargets.length}/${this.maxTargets}</p>
         <p>소요 시간: ${timeElapsed.toFixed(2)}초</p>
         <p>실패 횟수: ${this.failCount}회</p>
         <p>최종 점수: ${score}점</p>
@@ -500,14 +648,6 @@ const starForceStyles = `
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
 }
 
-.target-zone {
-  position: absolute;
-  height: 100%;
-  background-color: rgba(103, 58, 183, 0.5);
-  border-radius: 0;
-  z-index: 1;
-}
-
 .key-hint {
   margin-top: 15px;
   font-style: italic;
@@ -563,6 +703,46 @@ const starForceStyles = `
 .result-details p {
   margin: 8px 0;
   font-size: 18px;
+}
+
+.target-zone {
+  position: absolute;
+  height: 100%;
+  background-color: rgba(103, 58, 183, 0.5);
+  border-radius: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.target-zone.completed {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: rgba(76, 175, 80, 0.4);
+}
+
+.target-zone.current {
+  background-color: rgba(103, 58, 183, 0.7);
+  color: white;
+}
+
+.key-to-press {
+  background-color: rgba(158, 41, 176, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  color: #bb86fc;
+  display: inline-block;
+  margin: 0 5px;
+  transition: all 0.3s ease;
+}
+
+.key-to-press.active {
+  background-color: rgba(158, 41, 176, 0.5);
+  transform: scale(1.1);
 }
 
 @keyframes scale-pop {

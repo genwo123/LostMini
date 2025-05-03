@@ -41,6 +41,20 @@ export default class ClientGameManager {
       gyeokdol: null,
       starforce: null
     };
+    
+    // 사이드바 타이틀 변경
+    this.updateSidebarTitle();
+  }
+  
+  // 사이드바 타이틀 업데이트 (게임 결과 -> 라운드 결과)
+  updateSidebarTitle() {
+    // 약간의 시간 지연을 두고 실행해 DOM이 준비되도록 함
+    setTimeout(() => {
+      const sidebarTitle = document.querySelector('.game-results-sidebar h2');
+      if (sidebarTitle) {
+        sidebarTitle.textContent = '라운드 결과';
+      }
+    }, 100);
   }
   
   // 모든 게임 스타일 주입
@@ -322,7 +336,7 @@ export default class ClientGameManager {
       <p>"${this.getGameDisplayName(selectedMode)}"가 선택되었습니다!</p>
       <div class="countdown-timer">
         <p>게임 시작까지</p>
-        <div class="countdown-display">5</div>
+        <div class="countdown-display">3</div>
         <p>초</p>
       </div>
     `;
@@ -332,13 +346,13 @@ export default class ClientGameManager {
     // 결과 사운드 재생
     playSound('goal');
     
-    // 5초 카운트다운 시작
-    let countdown = 5;
+    // 3초 카운트다운 시작 (기존 5초에서 변경)
+    let countdown = 3;
     const countdownDisplay = document.querySelector('.countdown-display');
     
     // 시스템 메시지로 알림
     const messageEvent = new CustomEvent('system-message', {
-      detail: { message: `${this.getGameDisplayName(selectedMode)} 게임이 5초 후에 시작됩니다!` }
+      detail: { message: `${this.getGameDisplayName(selectedMode)} 게임이 3초 후에 시작됩니다!` }
     });
     document.dispatchEvent(messageEvent);
     
@@ -348,6 +362,12 @@ export default class ClientGameManager {
       if (countdownDisplay) {
         countdownDisplay.textContent = countdown;
       }
+      
+      // 채팅창에 카운트다운 표시
+      const chatMessage = new CustomEvent('system-message', {
+        detail: { message: `게임 시작 ${countdown}초 전...` }
+      });
+      document.dispatchEvent(chatMessage);
       
       // 카운트다운 사운드
       if (countdown > 0) {
@@ -490,8 +510,12 @@ updateSidebarResults(round, results) {
   const sidebarContent = document.querySelector('.sidebar-results-content');
   if (!sidebarContent) return;
   
-  // 기존 내용 초기화
-  sidebarContent.innerHTML = '';
+  // 기존 내용 유지하면서 새 라운드 결과 추가
+  // 초기 메시지 제거
+  const initialMessage = sidebarContent.querySelector('.sidebar-initial-message');
+  if (initialMessage) {
+    initialMessage.remove();
+  }
   
   // 라운드 제목 추가
   const roundTitle = document.createElement('div');
@@ -526,15 +550,15 @@ updateSidebarResults(round, results) {
   
   // 다른 유저들의 점수도 업데이트
   this.updateUsersScore(results);
+  
+  // 스크롤을 최하단으로
+  sidebarContent.scrollTop = sidebarContent.scrollHeight;
 }
 
 // 사이드바 최종 결과 업데이트
 updateSidebarFinalResults(ranking) {
   const sidebarContent = document.querySelector('.sidebar-results-content');
   if (!sidebarContent) return;
-  
-  // 기존 내용 초기화
-  sidebarContent.innerHTML = '';
   
   // 최종 결과 제목 추가
   const finalTitle = document.createElement('div');
@@ -567,6 +591,9 @@ updateSidebarFinalResults(ranking) {
   
   // 다른 유저들의 최종 점수 업데이트
   this.updateUsersFinalScore(ranking);
+  
+  // 스크롤을 최하단으로
+  sidebarContent.scrollTop = sidebarContent.scrollHeight;
 }
 
 // 유저 점수 업데이트 (오른쪽 사이드바)
@@ -649,6 +676,9 @@ updateUsersFinalScore(ranking) {
     
     // 대기 화면 표시
     this.showWaitingScreen();
+    
+    // 사이드바 타이틀 다시 업데이트
+    this.updateSidebarTitle();
   }
   
   // 대기 화면 표시
